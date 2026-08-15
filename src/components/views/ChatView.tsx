@@ -58,6 +58,7 @@ const INITIAL_GREETING: ChatMessage = {
 };
 
 const SUGGESTED_QUESTIONS = [
+  { text: '🌌 Analizza un Tema Natale e i transiti attuali', category: 'astrologia' },
   { text: '📅 Cosa ho in programma oggi in agenda?', category: 'consulenza' },
   { text: '🔮 Chi vedo domani per consulti?', category: 'consulenza' },
   { text: '🃏 Carta dei Tarocchi e guida per oggi', category: 'tarocchi' },

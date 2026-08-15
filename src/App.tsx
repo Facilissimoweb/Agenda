@@ -482,7 +482,16 @@ export default function App() {
               )}
 
               {activeTab === 'strumenti' && (
-                <StrumentiView onShowToast={showToast} />
+                <StrumentiView
+                  contacts={contacts}
+                  onSendToChat={(prompt) => {
+                    setPendingChatPrompt(prompt);
+                    setActiveTab('chat');
+                    showToast('🔮 Tema Natale & Dati Astrologici trasferiti alla Chat dell\'Oracolo!');
+                  }}
+                  onSaveToJournal={handleAddNote}
+                  onShowToast={showToast}
+                />
               )}
 
               {activeTab === 'chat' && (
