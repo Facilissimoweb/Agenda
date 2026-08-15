@@ -138,10 +138,27 @@ export async function signUpWithPassword(email: string, password: string): Promi
   });
 }
 
+export async function verifyEmailOtp(email: string, token: string): Promise<{ error: any; data: any }> {
+  const client = getSupabaseClient();
+  if (!client) throw new Error('Supabase non configurato.');
+  return await client.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: token.trim(),
+    type: 'email',
+  });
+}
+
 export async function signOut(): Promise<{ error: any }> {
   const client = getSupabaseClient();
   if (!client) return { error: null };
   return await client.auth.signOut();
+}
+
+export async function getSession() {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  const { data } = await client.auth.getSession();
+  return data.session;
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -149,6 +166,15 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!client) return null;
   const { data } = await client.auth.getUser();
   return data.user;
+}
+
+export function subscribeToAuthStateChange(callback: (event: string, session: any) => void) {
+  const client = getSupabaseClient();
+  if (!client) return { unsubscribe: () => {} };
+  const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+    callback(event, session);
+  });
+  return subscription;
 }
 
 // --- DATABASE SYNC METHODS ---

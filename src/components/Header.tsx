@@ -14,7 +14,8 @@ import {
   MessageSquareText,
   Database,
   CloudCheck,
-  Cloud
+  Cloud,
+  Lock
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -24,6 +25,7 @@ interface HeaderProps {
   appointmentsCount: number;
   isCloudConnected?: boolean;
   onOpenSupabaseModal: () => void;
+  onLockSanctuary?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   appointmentsCount,
   isCloudConnected,
   onOpenSupabaseModal,
+  onLockSanctuary,
 }) => {
   const navItems: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number; highlight?: boolean }> = [
     { id: 'home', label: 'Oggi', icon: Home },
@@ -124,6 +127,17 @@ export const Header: React.FC<HeaderProps> = ({
           <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
           <span className="hidden sm:inline">Nuovo</span> Appuntamento
         </button>
+
+        {/* Lock Sanctuary Button */}
+        {onLockSanctuary && (
+          <button
+            onClick={onLockSanctuary}
+            title="Blocca e oscura il Santuario"
+            className="p-2 rounded-full bg-[#171030] hover:bg-rose-950/60 border border-purple-500/30 hover:border-rose-500/50 text-purple-300 hover:text-rose-300 transition cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </header>
   );

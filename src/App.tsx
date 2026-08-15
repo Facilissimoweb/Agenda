@@ -28,6 +28,7 @@ import { DiarioView } from './components/views/DiarioView';
 import { StrumentiView } from './components/views/StrumentiView';
 import { ChatView } from './components/views/ChatView';
 import { SupabaseAuthModal } from './components/modals/SupabaseAuthModal';
+import { PrivacyGate } from './components/PrivacyGate';
 import { 
   getSupabaseConfig, 
   testSupabaseConnection, 
@@ -36,11 +37,20 @@ import {
   uploadContactsToCloud,
   uploadCycleDataToCloud,
   uploadWeeklyMenuToCloud,
-  uploadJournalNotesToCloud
+  uploadJournalNotesToCloud,
+  subscribeToAuthStateChange
 } from './services/supabaseClient';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  // Privacy Lock Gate State (Default password: ficoinfiore)
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+    return (
+      localStorage.getItem('mt_sanctuary_unlocked') === 'true' ||
+      sessionStorage.getItem('mt_sanctuary_unlocked') === 'true'
+    );
+  });
+
   // State Initialization with LocalStorage Persistence
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     return (localStorage.getItem('mt_active_tab') as TabId) || 'home';
@@ -134,6 +144,36 @@ export default function App() {
       initialLoadDone.current = true;
     };
     initCloud();
+
+    // Listen to Auth State changes (e.g. Magic Link / OTP / Password login)
+    const sub = subscribeToAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setIsCloudConnected(true);
+        showToast(`✨ Bentornata ${session.user.email}! Dati sincronizzati.`);
+        const cloudRes = await downloadAllCloudData();
+        if (cloudRes.success && cloudRes.data) {
+          if (cloudRes.data.appointments && cloudRes.data.appointments.length > 0) {
+            setAppointments(cloudRes.data.appointments);
+          }
+          if (cloudRes.data.contacts && cloudRes.data.contacts.length > 0) {
+            setContacts(cloudRes.data.contacts);
+          }
+          if (cloudRes.data.cycleData) {
+            setCycleData(cloudRes.data.cycleData);
+          }
+          if (cloudRes.data.weeklyMenu && Object.keys(cloudRes.data.weeklyMenu).length > 0) {
+            setWeeklyMenu(cloudRes.data.weeklyMenu);
+          }
+          if (cloudRes.data.journalNotes && cloudRes.data.journalNotes.length > 0) {
+            setJournalNotes(cloudRes.data.journalNotes);
+          }
+        }
+      }
+    });
+
+    return () => {
+      sub?.unsubscribe?.();
+    };
   }, []);
 
   // Sync to LocalStorage & Supabase
@@ -313,8 +353,26 @@ export default function App() {
     setJournalNotes((prev) => prev.filter((n) => n.id !== id));
   };
 
+  // Sanctuary Lock & Unlock Handlers
+  const handleUnlock = () => {
+    setIsUnlocked(true);
+    showToast('✨ Benvenuta nel tuo Santuario Privato!');
+  };
+
+  const handleLock = () => {
+    localStorage.removeItem('mt_sanctuary_unlocked');
+    sessionStorage.removeItem('mt_sanctuary_unlocked');
+    setIsUnlocked(false);
+    showToast('🔒 Santuario bloccato ed oscurato.');
+  };
+
   return (
     <div className="relative min-h-screen bg-[#0a0915] text-slate-100 pb-28 lg:pb-12 selection:bg-purple-900 selection:text-amber-200">
+      {/* Privacy Gate: Obscures everything until password 'ficoinfiore' is entered */}
+      {!isUnlocked && (
+        <PrivacyGate onUnlock={handleUnlock} />
+      )}
+
       {/* Background Starfield Canvas */}
       <StarfieldCanvas />
 
@@ -337,6 +395,7 @@ export default function App() {
           appointmentsCount={appointments.length}
           isCloudConnected={isCloudConnected}
           onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+          onLockSanctuary={handleLock}
         />
 
         {/* Dynamic Views with Fade & Slide Animation */}
