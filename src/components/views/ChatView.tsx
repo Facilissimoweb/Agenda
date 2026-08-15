@@ -6,6 +6,8 @@ import {
   saveStoredGroqApiKey, 
   getStoredGroqModel, 
   saveStoredGroqModel,
+  getApiKeyDetails,
+  sanitizeApiKey,
   GROQ_MODELS 
 } from '../../services/groqService';
 import { 
@@ -28,15 +30,14 @@ import {
   Copy, 
   Check, 
   Loader2, 
-  Wand2, 
-  Moon, 
   ShieldCheck, 
-  HelpCircle,
   X,
   ExternalLink,
   RefreshCw,
-  Flame,
-  Radio
+  Radio,
+  Info,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -49,17 +50,17 @@ interface ChatViewProps {
 const INITIAL_GREETING: ChatMessage = {
   id: 'msg-welcome',
   sender: 'assistant',
-  text: `Salute a te, Maria Teresa. ✨ Sono la tua **Guida Esoterica & Oracolo Alchemico**, alimentata dal motore AI di Groq.\n\nPuoi parlarmi digitando un messaggio oppure **premendo il microfono** per parlare a voce libera. Se desideri ascoltare le mie risposte, premi l'icona dell'altoparlante 🔊 accanto al messaggio.\n\n*Come posso illuminare il tuo cammino o i tuoi consulti oggi?*`,
+  text: `Salute a te, Maria Teresa. ✨ Sono la tua **Guida Esoterica & Oracolo Alchemico**, alimentata dal motore AI di Groq (Llama 3.3).\n\nPuoi parlarmi digitando un messaggio oppure **premendo l'icona del microfono 🎙️** per parlare a voce libera. Se desideri ascoltare le mie risposte, premi l'icona **"Leggi Vocale" 🔊** accanto a qualsiasi messaggio.\n\n*Come posso illuminare il tuo cammino, i tuoi rituali o i tuoi consulti oggi?*`,
   timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
   category: 'generale',
 };
 
 const SUGGESTED_QUESTIONS = [
-  { text: '🃏 Tarocchi per la giornata di oggi', category: 'tarocchi' },
+  { text: '🃏 Carta dei Tarocchi e guida per oggi', category: 'tarocchi' },
   { text: '🌙 Rituale di purificazione con la Luna attuale', category: 'astrologia' },
   { text: '📿 Come proteggere il campo aurico durante un consulto?', category: 'consulenza' },
   { text: '🌿 Quali erbe o cristalli abbinare al Chakra del Cuore?', category: 'rituale' },
-  { text: '🔮 Come interpretare la carta della Papessa nei sentimenti?', category: 'tarocchi' },
+  { text: '🔮 Come interpretare la Papessa nei sentimenti?', category: 'tarocchi' },
   { text: '💭 Interpretazione di un sogno con simboli d\'acqua e fuoco', category: 'sogno' },
 ];
 
@@ -88,11 +89,27 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
   const [includeSanctuaryContext, setIncludeSanctuaryContext] = useState(true);
   const [autoReadResponse, setAutoReadResponse] = useState(false);
   const [keyTestStatus, setKeyTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [keyTestFeedback, setKeyTestFeedback] = useState<string>('');
+
+  // Key details info
+  const [keyDetails, setKeyDetails] = useState(() => getApiKeyDetails());
+
+  // Quick inline key input banner state
+  const [quickKeyInput, setQuickKeyInput] = useState('');
 
   // Speech Recognition instance ref
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Refresh key details on mount or changes
+  const refreshKeyDetails = () => {
+    setKeyDetails(getApiKeyDetails());
+  };
+
+  useEffect(() => {
+    refreshKeyDetails();
+  }, [isSettingsOpen]);
 
   // Save messages to LocalStorage
   useEffect(() => {
@@ -125,14 +142,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
   // Initialize Speech Recognition
   const toggleSpeechRecognition = () => {
     if (!isSpeechRecognitionSupported()) {
-      onShowToast('Il tuo browser non supporta il riconoscimento vocale. Usa Google Chrome o Edge.');
+      onShowToast('Il tuo browser non supporta il microfono per la dettatura vocale. Usa Google Chrome o Edge.');
       return;
     }
 
     if (isRecording) {
-      // Stop recording
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
       }
       setIsRecording(false);
       return;
@@ -257,13 +275,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
       }
 
       if (response.isFallback) {
-        onShowToast('Risposta oracolare generata con successo.');
+        onShowToast('Risposta oracolare generata.');
       }
     } catch (err: any) {
       const errorMsg: ChatMessage = {
         id: `msg-err-${Date.now()}`,
         sender: 'assistant',
-        text: `🕊️ Si è verificato un inconveniente nella ricezione della risposta: ${err.message || 'Errore imprevisto'}. Riprova tra un istante.`,
+        text: `🕊️ Si è verificato un inconveniente: ${err.message || 'Errore imprevisto'}. Riprova tra un istante.`,
         timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -287,7 +305,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
       onEnd: () => {
         setSpeakingMessageId(null);
       },
-      onError: (err) => {
+      onError: () => {
         setSpeakingMessageId(null);
         onShowToast('Impossibile riprodurre la voce.');
       },
@@ -315,54 +333,84 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
 
   // Save Settings Modal
   const handleSaveSettings = () => {
-    saveStoredGroqApiKey(apiKeyInput);
+    const cleaned = sanitizeApiKey(apiKeyInput);
+    saveStoredGroqApiKey(cleaned);
     saveStoredGroqModel(selectedModel);
+    refreshKeyDetails();
     setIsSettingsOpen(false);
-    onShowToast('Impostazioni Groq AI aggiornate con successo!');
+    onShowToast('Impostazioni e Chiave Groq AI salvate con successo!');
+  };
+
+  // Quick save from inline banner
+  const handleQuickSaveKey = () => {
+    const cleaned = sanitizeApiKey(quickKeyInput);
+    if (!cleaned) {
+      onShowToast('Incolla una chiave API valida (es. gsk_...).');
+      return;
+    }
+    saveStoredGroqApiKey(cleaned);
+    setApiKeyInput(cleaned);
+    setQuickKeyInput('');
+    refreshKeyDetails();
+    onShowToast('✅ Chiave Groq salvata nel browser!');
+    try {
+      confetti({
+        particleCount: 20,
+        spread: 40,
+        origin: { y: 0.7 },
+        colors: ['#d4af37', '#10b981', '#a855f7'],
+      });
+    } catch (e) {}
   };
 
   // Test Groq API Key
   const handleTestApiKey = async () => {
-    if (!apiKeyInput.trim()) {
+    const keyToTest = sanitizeApiKey(apiKeyInput) || keyDetails.key;
+    if (!keyToTest) {
       onShowToast('Inserisci una chiave API Groq da testare.');
       return;
     }
 
     setKeyTestStatus('testing');
+    setKeyTestFeedback('Connessione ai server Groq in corso...');
+
     try {
       const res = await sendGroqChatMessage(
-        [{ role: 'user', content: 'Rispondi solo con: Chiave Groq Valida ✨' }],
+        [{ role: 'user', content: 'Rispondi solo con: Oracolo Groq Attivo ✨' }],
         {
-          apiKey: apiKeyInput.trim(),
+          apiKey: keyToTest,
           model: selectedModel,
         }
       );
 
       if (res.success && !res.isFallback) {
         setKeyTestStatus('success');
+        setKeyTestFeedback(`✅ Connessione riuscita a ${res.engine || 'Groq'}!`);
         onShowToast('✅ Connessione a Groq riuscita con successo!');
         try {
           confetti({
-            particleCount: 20,
-            spread: 40,
+            particleCount: 25,
+            spread: 50,
             origin: { y: 0.7 },
             colors: ['#d4af37', '#10b981', '#a855f7'],
           });
         } catch (e) {}
       } else {
         setKeyTestStatus('error');
+        setKeyTestFeedback(`❌ ${res.errorMsg || 'Chiave non autorizzata (401)'}`);
         onShowToast(`❌ Test non riuscito: ${res.errorMsg || 'Chiave non valida'}`);
       }
     } catch (e: any) {
       setKeyTestStatus('error');
+      setKeyTestFeedback(`❌ Errore di rete: ${e.message}`);
       onShowToast(`❌ Errore test: ${e.message}`);
     }
   };
 
-  const hasConfiguredKey = !!(getStoredGroqApiKey() || apiKeyInput.trim());
+  const hasConfiguredKey = !!(keyDetails.key || apiKeyInput.trim());
 
   return (
-    <div className="space-y-4 sm:space-y-6 flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-160px)] min-h-[580px]">
+    <div className="space-y-3 sm:space-y-4 flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-160px)] min-h-[580px]">
       {/* Top Header Bar */}
       <div className="bg-[#131127] border border-[#2a244d] p-3 sm:p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -370,24 +418,44 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-md shadow-amber-500/10 text-xl">
               🔮
             </div>
-            <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#131127] rounded-full" />
+            <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 border-2 border-[#131127] rounded-full ${hasConfiguredKey ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
           </div>
 
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="font-cinzel font-bold text-sm sm:text-base text-white gold-gradient-text">
                 Oracolo & Guida Esoterica AI
               </h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-amber-300 font-mono">
-                GROQ AI
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 border border-amber-400/40 text-amber-300 font-mono font-semibold">
+                Llama 3.3 70B
               </span>
             </div>
-            <p className="text-[11px] text-purple-300/80 font-light flex items-center gap-1.5">
-              <span>{hasConfiguredKey ? 'Connesso a Llama 3.3 70B' : 'Modalità Oracolare & Risposte Locali'}</span>
+
+            <p className="text-[11px] text-purple-300/80 font-light flex items-center gap-1.5 flex-wrap">
+              {keyDetails.source === 'vercel_vite' && (
+                <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Vercel (VITE_GROQ_API_KEY): Attiva
+                </span>
+              )}
+              {keyDetails.source === 'vercel_groq' && (
+                <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Vercel (GROQ_API_KEY): Attiva
+                </span>
+              )}
+              {keyDetails.source === 'local' && (
+                <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Chiave Browser Salvata
+                </span>
+              )}
+              {keyDetails.source === 'none' && (
+                <span className="text-amber-300 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3 h-3 text-amber-400" /> Modalità Oracolare & Risposte Locali
+                </span>
+              )}
               <span>•</span>
-              <span className="text-emerald-400 flex items-center gap-0.5">
-                <Radio className="w-2.5 h-2.5 animate-pulse" />
-                Audio & Voce Attivi
+              <span className="text-purple-300/90 flex items-center gap-0.5">
+                <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                Microfono & Voce
               </span>
             </p>
           </div>
@@ -406,7 +474,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
               );
             }}
             title="Includi contesto lunare e del santuario nelle risposte"
-            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition text-[11px] ${
+            className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition text-[11px] ${
               includeSanctuaryContext
                 ? 'bg-purple-900/50 border-amber-400/40 text-amber-300'
                 : 'bg-[#1d1138] border-[#2a244d] text-purple-300 hover:text-white'
@@ -419,26 +487,57 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
           {/* Settings / API Key Button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition active:scale-95 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition active:scale-95 cursor-pointer text-xs ${
               hasConfiguredKey
                 ? 'bg-[#1d1138] border-[#2a244d] text-purple-200 hover:text-amber-300 hover:border-amber-400/40'
                 : 'bg-amber-400/20 border-amber-400 text-amber-300 animate-pulse'
             }`}
           >
             <Key className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Configura</span> Chiave Groq
+            <span>{hasConfiguredKey ? 'Impostazioni Groq' : 'Inserisci Chiave Groq'}</span>
           </button>
 
           {/* Clear History Button */}
           <button
             onClick={handleClearHistory}
-            title="Pulisci cronologia"
+            title="Pulisci cronologia messaggi"
             className="p-2 rounded-xl bg-[#1d1138] border border-[#2a244d] text-purple-300 hover:text-rose-400 hover:border-rose-500/40 transition active:scale-95 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
+
+      {/* Quick Setup Banner if No API Key is active */}
+      {!hasConfiguredKey && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#131127] border border-amber-400/40 p-3 sm:p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3 shadow-lg flex-shrink-0 animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-xs text-amber-200 w-full md:w-auto">
+            <Info className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-white">Attiva subito Groq AI (Llama 3.3 70B)</p>
+              <p className="text-[11px] text-purple-200/80">
+                Incolla qui la tua chiave Groq (<code>gsk_...</code>) oppure impostala come <code>VITE_GROQ_API_KEY</code> su Vercel.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              type="password"
+              value={quickKeyInput}
+              onChange={(e) => setQuickKeyInput(e.target.value)}
+              placeholder="Incolla chiave gsk_..."
+              className="bg-[#1d1138] border border-amber-400/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-purple-400/60 focus:outline-none focus:border-amber-400 flex-1 md:w-56 font-mono"
+            />
+            <button
+              onClick={handleQuickSaveKey}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md transition active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              Attiva
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Messages Scrollable Area */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-1 sm:pr-2 scrollbar-thin scrollbar-thumb-purple-900/40">
@@ -459,7 +558,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
               )}
 
               <div
-                className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 sm:p-4.5 space-y-2.5 shadow-lg relative text-xs leading-relaxed ${
+                className={`max-w-[88%] sm:max-w-[78%] rounded-2xl p-4 sm:p-4.5 space-y-2.5 shadow-lg relative text-xs leading-relaxed ${
                   isUser
                     ? 'bg-gradient-to-r from-purple-900/80 to-indigo-950/80 border border-purple-500/40 text-purple-50 rounded-tr-sm ml-4'
                     : 'bg-[#131127] border border-[#2a244d] text-purple-100 rounded-tl-sm'
@@ -468,7 +567,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                 {/* Header info */}
                 <div className="flex items-center justify-between gap-2 border-b border-purple-500/15 pb-1.5 text-[10px] text-purple-300/80">
                   <span className="font-semibold font-cinzel text-amber-300/90 flex items-center gap-1">
-                    {isUser ? 'Maria Teresa' : 'Sacerdotessa & Oracolo AI'}
+                    {isUser ? 'Maria Teresa' : 'Oracolo & Guida Esoterica AI'}
                   </span>
                   <span>{msg.timestamp}</span>
                 </div>
@@ -507,7 +606,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                         {isPlayingThis ? (
                           <>
                             <VolumeX className="w-3.5 h-3.5 text-slate-950" />
-                            <span>Interrompi Lettura</span>
+                            <span>Interrompi</span>
                           </>
                         ) : (
                           <>
@@ -552,7 +651,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
             </div>
             <div className="bg-[#131127] border border-[#2a244d] rounded-2xl rounded-tl-sm p-4 text-xs text-purple-200 flex items-center gap-3">
               <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-              <span>Consultazione dell'Oracolo & calcolo degli astri...</span>
+              <span>Consultazione dell'Oracolo & elaborazione celestiale...</span>
             </div>
           </div>
         )}
@@ -560,7 +659,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Suggested Questions Pill Bar (when not loading) */}
+      {/* Quick Suggested Questions Pill Bar (when few messages) */}
       {messages.length <= 4 && !isLoading && (
         <div className="flex-shrink-0 space-y-1.5">
           <span className="text-[10px] uppercase font-cinzel tracking-wider text-purple-300/80 px-1">
@@ -587,19 +686,21 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
             <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold">
               <span className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
               <Mic className="w-4 h-4 text-amber-400" />
-              <span>{isRecording ? 'Ascolto in corso... Parla liberamente' : 'Trascrizione Vocale Pronta'}</span>
+              <span>{isRecording ? 'Microfono attivo... Parla liberamente' : 'Trascrizione Vocale Pronta'}</span>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
                   if (isRecording && recognitionRef.current) {
-                    recognitionRef.current.stop();
+                    try {
+                      recognitionRef.current.stop();
+                    } catch (e) {}
                   }
                   setIsRecording(false);
                   setSpeechTranscript('');
                 }}
-                className="text-[11px] text-purple-300 hover:text-rose-300 transition"
+                className="text-[11px] text-purple-300 hover:text-rose-300 transition cursor-pointer"
               >
                 Annulla
               </button>
@@ -607,14 +708,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
           </div>
 
           <p className="text-xs text-white bg-[#131127] p-2.5 rounded-xl border border-purple-500/30 italic">
-            "{speechTranscript || 'In attesa delle tue parole...'}"
+            "{speechTranscript || 'In ascolto delle tue parole...'}"
           </p>
 
           <div className="flex items-center justify-end gap-2 text-xs">
             <button
               onClick={() => handleApplyVoiceTranscript(false)}
               disabled={!speechTranscript.trim()}
-              className="px-3 py-1.5 bg-[#131127] border border-[#2a244d] text-purple-200 hover:text-white rounded-xl disabled:opacity-50 text-xs transition"
+              className="px-3 py-1.5 bg-[#131127] border border-[#2a244d] text-purple-200 hover:text-white rounded-xl disabled:opacity-50 text-xs transition cursor-pointer"
             >
               Modifica nel campo
             </button>
@@ -648,9 +749,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                 ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/40 animate-pulse'
                 : 'bg-[#1d1138] border border-purple-500/40 text-amber-300 hover:bg-purple-900/50 hover:border-amber-400'
             }`}
-            title="Premi per parlare al microfono"
+            title="Premi per parlare al microfono in italiano"
           >
-            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-amber-400" />}
           </button>
 
           {/* Textarea Input */}
@@ -665,7 +766,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                 handleSendMessage();
               }
             }}
-            placeholder="Chiedi all'Oracolo o parla al microfono..."
+            placeholder="Chiedi all'Oracolo o premi il microfono per parlare..."
             className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-purple-400/60 focus:outline-none focus:border-amber-400 resize-none max-h-28"
           />
 
@@ -697,10 +798,43 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-purple-300 hover:text-white p-1 rounded-lg"
+                className="text-purple-300 hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Current Key Status */}
+            <div className="bg-[#1d1138] p-3.5 rounded-2xl border border-purple-500/30 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-purple-300 font-medium">Stato Rilevamento Chiave:</span>
+                {keyDetails.source === 'vercel_vite' && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                    Vercel (VITE_GROQ_API_KEY)
+                  </span>
+                )}
+                {keyDetails.source === 'vercel_groq' && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                    Vercel (GROQ_API_KEY)
+                  </span>
+                )}
+                {keyDetails.source === 'local' && (
+                  <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/30">
+                    Browser Locale
+                  </span>
+                )}
+                {keyDetails.source === 'none' && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                    Non configurata
+                  </span>
+                )}
+              </div>
+
+              {keyDetails.maskedKey && (
+                <div className="text-[11px] text-purple-200/80 font-mono">
+                  Chiave attiva: <span className="text-amber-300 font-bold">{keyDetails.maskedKey}</span>
+                </div>
+              )}
             </div>
 
             {/* Groq API Key Input */}
@@ -708,7 +842,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
               <div className="flex items-center justify-between text-xs">
                 <label className="text-purple-200 font-semibold flex items-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-amber-400" />
-                  Chiave API Groq (GROQ_API_KEY)
+                  Inserisci / Modifica Chiave API Groq
                 </label>
                 <a
                   href="https://console.groq.com/keys"
@@ -727,41 +861,44 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                 onChange={(e) => {
                   setApiKeyInput(e.target.value);
                   setKeyTestStatus('idle');
+                  setKeyTestFeedback('');
                 }}
                 placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-purple-400/50 focus:outline-none focus:border-amber-400 font-mono"
               />
 
               <p className="text-[11px] text-purple-300/80 leading-relaxed">
-                La tua chiave viene salvata in modo sicuro nel browser di Maria Teresa. Per la pubblicazione su <strong>Vercel</strong>, puoi anche impostarla come variabile d'ambiente <code className="text-amber-300 bg-purple-950 px-1 py-0.5 rounded">VITE_GROQ_API_KEY</code> nel pannello di controllo del progetto.
+                Su <strong>Vercel</strong> sono supportate sia <code>VITE_GROQ_API_KEY</code> sia <code>GROQ_API_KEY</code>. Puoi anche incollarla direttamente qui sopra per salvarla nel browser.
               </p>
             </div>
 
             {/* Test Connection Button */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleTestApiKey}
-                disabled={keyTestStatus === 'testing' || !apiKeyInput.trim()}
-                className="px-3.5 py-2 rounded-xl bg-[#1d1138] hover:bg-purple-900/40 border border-purple-500/40 text-amber-300 text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1.5 active:scale-95 cursor-pointer"
-              >
-                {keyTestStatus === 'testing' ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Verifica in corso...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Testa Connessione Groq</span>
-                  </>
-                )}
-              </button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestApiKey}
+                  disabled={keyTestStatus === 'testing'}
+                  className="px-3.5 py-2 rounded-xl bg-[#1d1138] hover:bg-purple-900/40 border border-purple-500/40 text-amber-300 text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  {keyTestStatus === 'testing' ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verifica in corso...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Testa Connessione Groq Ora</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
-              {keyTestStatus === 'success' && (
-                <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Chiave Valida!
-                </span>
+              {keyTestFeedback && (
+                <p className={`text-xs font-medium ${keyTestStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {keyTestFeedback}
+                </p>
               )}
             </div>
 
@@ -813,7 +950,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                 Zero Errori 500 su Vercel:
               </strong>
               <p>
-                Il sistema integra gestione degli errori e fallback oracolare locale. Se la rete o la chiave Groq non dovessero rispondere, l'applicazione fornirà comunque consigli esoterici senza interruzioni.
+                Il sistema gestisce automaticamente qualsiasi eccezione o mancata connessione e fornisce risposte oracolari istantanee anche offline.
               </p>
             </div>
 
@@ -822,7 +959,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 bg-[#1d1138] border border-[#2a244d] text-purple-300 hover:text-white rounded-xl text-xs"
+                className="px-4 py-2 bg-[#1d1138] border border-[#2a244d] text-purple-300 hover:text-white rounded-xl text-xs cursor-pointer"
               >
                 Annulla
               </button>

@@ -1,5 +1,6 @@
 // Groq AI API Service for Esoteric & Sanctuary Oracle
 import { ChatMessage } from '../types';
+import { GoogleGenAI } from '@google/genai';
 
 export const GROQ_MODELS = [
   { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile (Consigliato - Alta Saggezza)', speed: 'Veloce & Profondo' },
@@ -10,25 +11,86 @@ export const GROQ_MODELS = [
 
 export const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
 
-// Retrieve Groq API Key from Local Storage or Vite Environment Variable
-export function getStoredGroqApiKey(): string {
+// Helper to sanitize and trim API key (removes accidental quotes, spaces, Bearer prefix)
+export function sanitizeApiKey(rawKey?: string | null): string {
+  if (!rawKey || typeof rawKey !== 'string') return '';
+  let cleaned = rawKey.trim();
+  // Remove wrapping single or double quotes if copied accidentally from .env
+  cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
+  // Remove "Bearer " prefix if copied from header examples
+  if (cleaned.toLowerCase().startsWith('bearer ')) {
+    cleaned = cleaned.substring(7).trim();
+  }
+  return cleaned;
+}
+
+// Inspect where the API key is coming from (useful for user troubleshooting on Vercel vs Local)
+export function getApiKeyDetails(): {
+  key: string;
+  source: 'local' | 'vercel_vite' | 'vercel_groq' | 'none';
+  maskedKey: string;
+} {
+  // 1. Check LocalStorage
   try {
     const local = localStorage.getItem('mt_groq_api_key');
-    if (local && local.trim()) return local.trim();
+    const sanitizedLocal = sanitizeApiKey(local);
+    if (sanitizedLocal) {
+      return {
+        key: sanitizedLocal,
+        source: 'local',
+        maskedKey: maskKey(sanitizedLocal),
+      };
+    }
   } catch (e) {}
 
-  // Check Vite environment variable (available on Vercel build if set as VITE_GROQ_API_KEY)
-  const envKey = (import.meta as any).env?.VITE_GROQ_API_KEY;
-  if (envKey && typeof envKey === 'string' && envKey.trim()) {
-    return envKey.trim();
+  // 2. Check Vite Env (VITE_GROQ_API_KEY)
+  const envViteKey = sanitizeApiKey((import.meta as any).env?.VITE_GROQ_API_KEY);
+  if (envViteKey) {
+    return {
+      key: envViteKey,
+      source: 'vercel_vite',
+      maskedKey: maskKey(envViteKey),
+    };
   }
 
-  return '';
+  // 3. Check GROQ_API_KEY (injected via vite.config.ts define or import.meta.env)
+  const envGroqKey = sanitizeApiKey(
+    (import.meta as any).env?.GROQ_API_KEY ||
+    (typeof process !== 'undefined' ? (process.env?.GROQ_API_KEY || process.env?.VITE_GROQ_API_KEY) : '')
+  );
+  if (envGroqKey) {
+    return {
+      key: envGroqKey,
+      source: 'vercel_groq',
+      maskedKey: maskKey(envGroqKey),
+    };
+  }
+
+  return {
+    key: '',
+    source: 'none',
+    maskedKey: '',
+  };
+}
+
+function maskKey(key: string): string {
+  if (!key || key.length < 8) return '****';
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+
+// Retrieve Groq API Key
+export function getStoredGroqApiKey(): string {
+  return getApiKeyDetails().key;
 }
 
 export function saveStoredGroqApiKey(key: string): void {
   try {
-    localStorage.setItem('mt_groq_api_key', key.trim());
+    const sanitized = sanitizeApiKey(key);
+    if (sanitized) {
+      localStorage.setItem('mt_groq_api_key', sanitized);
+    } else {
+      localStorage.removeItem('mt_groq_api_key');
+    }
   } catch (e) {}
 }
 
@@ -85,7 +147,7 @@ REGOLE DI RISPOSTA:
 ${contextInfo}`;
 }
 
-// Send Message to Groq API with zero-500 crash defense
+// Send Message to Groq API (with intelligent fallbacks & zero-500 defense)
 export async function sendGroqChatMessage(
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   options?: {
@@ -100,102 +162,146 @@ export async function sendGroqChatMessage(
       appointmentsCount?: number;
     };
   }
-): Promise<{ text: string; success: boolean; isFallback?: boolean; errorMsg?: string }> {
-  const apiKey = options?.apiKey || getStoredGroqApiKey();
+): Promise<{ text: string; success: boolean; isFallback?: boolean; engine?: string; errorMsg?: string }> {
+  const rawKey = options?.apiKey || getStoredGroqApiKey();
+  const apiKey = sanitizeApiKey(rawKey);
   const model = options?.model || getStoredGroqModel();
   const systemPrompt = buildSanctuarySystemPrompt(options?.extraContext);
+  const lastUserText = messages[messages.length - 1]?.content || '';
 
-  // If no API key is provided, handle gracefully without 500 error
-  if (!apiKey) {
-    const userLastMsg = messages[messages.length - 1]?.content || '';
-    const fallbackResponse = generateEsotericFallbackResponse(userLastMsg, options?.extraContext);
-    return {
-      text: `${fallbackResponse}\n\n*(Nota: Per attivare la piena potenza di calcolo di Groq AI Llama 3.3, inserisci la tua chiave API GROQ cliccando sull'icona 🔑 "Chiave API" in alto a destra o impostando VITE_GROQ_API_KEY su Vercel).*`,
-      success: true,
-      isFallback: true,
-      errorMsg: 'Chiave API Groq non configurata. È stata generata una risposta oracolare locale.',
-    };
-  }
+  // 1. If Groq API Key is present, attempt Groq API call
+  if (apiKey) {
+    const formattedMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    ];
 
-  // Prepare full payload
-  const formattedMessages = [
-    { role: 'system', content: systemPrompt },
-    ...messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-  ];
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: formattedMessages,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: 1500,
+        }),
+      });
 
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: formattedMessages,
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: 1500,
-      }),
-    });
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data.choices?.[0]?.message?.content;
+        if (reply && reply.trim()) {
+          return {
+            text: reply.trim(),
+            success: true,
+            engine: `Groq (${model})`,
+          };
+        }
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorDetail = errorData?.error?.message || `Errore Groq HTTP ${response.status}`;
+      // If primary model gave a rate limit or 503, try instant fallback model
+      if (response.status === 429 || response.status >= 500) {
+        try {
+          const fallbackModel = model === 'llama-3.1-8b-instant' ? 'mixtral-8x7b-32768' : 'llama-3.1-8b-instant';
+          const fallbackRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: fallbackModel,
+              messages: formattedMessages,
+              temperature: 0.7,
+              max_tokens: 1200,
+            }),
+          });
 
-      // Handle specific HTTP error cases cleanly
+          if (fallbackRes.ok) {
+            const data = await fallbackRes.json();
+            const reply = data.choices?.[0]?.message?.content;
+            if (reply && reply.trim()) {
+              return {
+                text: reply.trim(),
+                success: true,
+                engine: `Groq Fallback (${fallbackModel})`,
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
+      // If unauthorized (401)
       if (response.status === 401) {
         return {
-          text: `⚠️ **Autenticazione Groq non riuscita (401)**\nLa chiave API inserita non risulta valida o è scaduta. Controlla la tua chiave su [Groq Console](https://console.groq.com/keys) e aggiornala nelle impostazioni della chat.\n\n${generateEsotericFallbackResponse(messages[messages.length - 1]?.content || '', options?.extraContext)}`,
+          text: `⚠️ **Autenticazione Groq non riuscita (401)**\nLa chiave API Groq inserita non è valida o è scaduta.\n\n👉 Clicca su **"Configura Chiave Groq"** in alto a destra per inserire la chiave corretta (inizia per \`gsk_\`), oppure verifica le variabili d'ambiente \`VITE_GROQ_API_KEY\` o \`GROQ_API_KEY\` su **Vercel**.\n\n---\n\n*Risposta Oracolare di Emergenza:*\n${generateEsotericFallbackResponse(lastUserText, options?.extraContext)}`,
           success: false,
-          errorMsg: 'Chiave API non valida o non autorizzata (401).',
+          errorMsg: 'Chiave API Groq non valida o non autorizzata (401)',
+          isFallback: true,
+          engine: 'Oracolo Locale di Emergenza',
         };
       }
 
-      if (response.status === 429) {
-        return {
-          text: `⏳ **Limite di Richieste Raggiunto (429 Rate Limit)**\nGroq sta elaborando molte richieste al momento. Attendi qualche secondo prima di inviare un nuovo messaggio.\n\n${generateEsotericFallbackResponse(messages[messages.length - 1]?.content || '', options?.extraContext)}`,
-          success: false,
-          errorMsg: 'Limite di frequenza raggiunto (429).',
-        };
-      }
-
+      // If other API error
+      const errorJson = await response.json().catch(() => ({}));
+      const errorMsg = errorJson?.error?.message || `Errore Groq HTTP ${response.status}`;
       return {
-        text: `⚠️ **Avviso Groq API (${response.status})**: ${errorDetail}\n\n*Risposta Oracolare di Emergenza:*\n${generateEsotericFallbackResponse(messages[messages.length - 1]?.content || '', options?.extraContext)}`,
+        text: `⚠️ **Avviso Groq API (${response.status})**: ${errorMsg}\n\n*Risposta Oracolare di Emergenza:*\n${generateEsotericFallbackResponse(lastUserText, options?.extraContext)}`,
         success: false,
-        errorMsg: errorDetail,
+        errorMsg: errorMsg,
+        isFallback: true,
+        engine: 'Oracolo Locale di Emergenza',
       };
+    } catch (err: any) {
+      console.warn('Groq API direct fetch failed, trying local fallback:', err);
     }
-
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content;
-
-    if (!reply) {
-      throw new Error('Risposta vuota ricevuta da Groq');
-    }
-
-    return {
-      text: reply,
-      success: true,
-    };
-  } catch (err: any) {
-    // Prevent any 500 or app crashes on Vercel
-    const userLastMsg = messages[messages.length - 1]?.content || '';
-    const fallbackText = generateEsotericFallbackResponse(userLastMsg, options?.extraContext);
-    
-    return {
-      text: `🕊️ **Risposta Oracolare:**\n\n${fallbackText}\n\n*(Nota: Connessione diretta a Groq non disponibile: ${err.message || 'Verifica la connessione internet'}).*`,
-      success: true,
-      isFallback: true,
-      errorMsg: err.message || 'Errore di connessione',
-    };
   }
+
+  // 2. If Gemini API Key is available in environment (e.g. process.env.GEMINI_API_KEY)
+  const geminiKey = sanitizeApiKey(
+    (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : '') ||
+    (import.meta as any).env?.VITE_GEMINI_API_KEY
+  );
+
+  if (geminiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const geminiResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `${systemPrompt}\n\nDomanda di Maria Teresa:\n${lastUserText}`,
+      });
+
+      if (geminiResponse.text) {
+        return {
+          text: geminiResponse.text.trim(),
+          success: true,
+          engine: 'Gemini 2.5 Flash',
+        };
+      }
+    } catch (e: any) {
+      console.warn('Gemini fallback attempt failed:', e);
+    }
+  }
+
+  // 3. Built-in Esoteric Knowledge Engine (Zero 500 guarantee)
+  const fallbackText = generateEsotericFallbackResponse(lastUserText, options?.extraContext);
+  return {
+    text: `${fallbackText}\n\n*(Nota: Per attivare la generazione neurale in tempo reale con Llama 3.3 70B, inserisci la tua chiave API GROQ cliccando su 🔑 "Configura Chiave Groq" in alto a destra oppure aggiungi \`VITE_GROQ_API_KEY\` nelle impostazioni di Vercel).*`,
+    success: true,
+    isFallback: true,
+    engine: 'Oracolo Locale del Santuario',
+  };
 }
 
 // Built-in esoteric fallback engine for resilience
-function generateEsotericFallbackResponse(
+export function generateEsotericFallbackResponse(
   userQuery: string,
   extraContext?: {
     moonPhase?: string;
@@ -205,25 +311,25 @@ function generateEsotericFallbackResponse(
 ): string {
   const q = userQuery.toLowerCase();
 
-  if (q.includes('tarocch') || q.includes('carta') || q.includes('arcan')) {
-    return `🃏 **Saggezza degli Arcani:**\nI simboli del mazzo ti invitano oggi ad ascoltare la voce del tuo intuito profondo. Quando interroghi gli Arcani per te o per i tuoi consulti, ricorda che ogni carta è uno specchio dell'Anima e un portale verso la consapevolezza.\n\n✨ **Consiglio pratico:** Prima di ogni stesa, purifica le mani con acqua di fiori o fumo di rosmarino, respira tre volte e formula l'intento con cuore aperto.`;
+  if (q.includes('tarocch') || q.includes('carta') || q.includes('arcan') || q.includes('stesa') || q.includes('papessa') || q.includes('imperatrice') || q.includes('matto')) {
+    return `🃏 **Saggezza degli Arcani per Maria Teresa:**\nI simboli del mazzo ti invitano oggi ad ascoltare la voce del tuo intuito profondo. Quando interroghi gli Arcani per te o per i tuoi consulti, ricorda che ogni carta è uno specchio dell'Anima e un portale verso la consapevolezza evolutiva.\n\n✨ **Consiglio pratico per la stesa:**\n- Purifica le mani con acqua di fiori o fumo di rosmarino prima di mescolare.\n- Fai respirare il mazzo tagliando tre volte verso sinistra.\n- Mantieni una postura centrata e lascia che l'immagine parli prima al cuore e poi all'intelletto.\n\n🕯️ *La luce degli Arcani illumini il tuo consulto.*`;
   }
 
-  if (q.includes('luna') || q.includes('fase') || q.includes('transito') || q.includes('astrolog')) {
-    return `🌙 **Influssi Astrali & Lunari:**\nLa configurazione celeste attuale amplifica la sensibilità psichica e la chiarezza dei tuoi canali intuitivi. ${extraContext?.moonPhase ? `Siamo in fase di **${extraContext.moonPhase}**, un tempo propizio per allineare desideri e azioni.` : 'È il momento ideale per raccogliere le energie e proteggere il proprio campo aurico.'}\n\n🕯️ **Rituale consigliato:** Accendi una candela bianca o viola e consacra il tuo spazio di lavoro con fumo di salvia o lavanda.`;
+  if (q.includes('luna') || q.includes('fase') || q.includes('transito') || q.includes('astrolog') || q.includes('segno') || q.includes('pianet')) {
+    return `🌙 **Influssi Astrali & Ritmo Lunare:**\nLa configurazione celeste attuale amplifica la sensibilità psichica e la chiarezza dei tuoi canali intuitivi. ${extraContext?.moonPhase ? `Siamo attualmente in fase di **${extraContext.moonPhase}**, un tempo propizio per allineare le tue intenzioni al flusso universale.` : 'È un momento ideale per raccogliere le energie e proteggere il proprio campo aurico.'}\n\n🕯️ **Rituale consigliato:**\n- Accendi una candela bianca o viola e consacra il tuo spazio sacro con fumo di salvia o lavanda.\n- Disponi un bicchiere d'acqua alla luce della luna per caricare un elisir di chiarezza interiore.`;
   }
 
-  if (q.includes('sogn') || q.includes('dormir') || q.includes('incubo') || q.includes('notte')) {
-    return `🔮 **Interpretazione del Mondo Onirico:**\nI sogni sono messaggi del sé superiore e dell'inconscio archetipico. Prendi nota dei colori dominanti, delle emozioni provate al risveglio e degli elementi (acqua = emozioni, fuoco = trasformazione, terra = radicamento, aria = pensieri).\n\n🌿 **Sigillo di Protezione:** Posiziona un'Ametista o una Selenite sotto il cuscino per favorire sogni lucidi e pace spirituale.`;
+  if (q.includes('sogn') || q.includes('dormir') || q.includes('incubo') || q.includes('notte') || q.includes('vision')) {
+    return `🔮 **Interpretazione del Mondo Onirico:**\nI sogni sono messaggi del sé superiore e dell'inconscio archetipico. Prendi nota dei colori dominanti, delle emozioni provate al risveglio e degli elementi simbolici (l'Acqua riflette le emozioni profonde, il Fuoco la trasformazione spirituale, la Terra il radicamento, l'Aria i pensieri e le intuizioni).\n\n🌿 **Sigillo di Protezione Notturna:**\nPosiziona un'Ametista o una Selenite sotto il cuscino per favorire sonno ristoratore, sogni lucidi e pace aurica.`;
   }
 
-  if (q.includes('client') || q.includes('consult') || q.includes('appuntament')) {
-    return `📿 **Guida per la Consulenza Sacra:**\nOgni persona che giunge da te è guidata da una sincronicità. Accoglila come un'anima in cammino. Mantieni il tuo radicamento con una Tormalina Nera o un Diaspro Rosso alla base del tavolo per non assorbire energie dense.\n\n✨ **Mantra di Chiusura:** Al termine del consulto, batti le mani tre volte o soffia via dolcemente l'energia residua per liberare lo spazio.`;
+  if (q.includes('client') || q.includes('consult') || q.includes('appuntament') || q.includes('protegg') || q.includes('auric') || q.includes('scherm')) {
+    return `📿 **Guida per la Consulenza Sacra & Protezione Aurica:**\nOgni persona che giunge da te porta una storia e un'energia specifica. Per mantenere la massima purezza energetica durante e dopo i consulti:\n\n1. **Radicamento:** Tieni una Tormalina Nera o un Diaspro Rosso vicino al tavolo di lavoro.\n2. **Schermo di Luce:** Prima di iniziare, visualizza una sfera di luce dorata o violacea che avvolge il tuo corpo.\n3. **Chiusura Energetica:** Al termine del consulto, batti le mani tre volte, lava i polsi con acqua fresca e ringrazia le tue guide.`;
   }
 
-  if (q.includes('erb') || q.includes('cristall') || q.includes('purific') || q.includes('incens')) {
-    return `🌿 **Alchimia dei Cristalli & Piante Sacre:**\nLe vibrazioni della natura sono alleati potenti. Per purificare lo spazio usa **Salvia Bianca o Rosmarino** con fumo a spirale in senso orario. Per elevare la frequenza, diffondi essenza di **Rosa Damascena o Lavanda Vera**.\n\n💎 **Cristallo alleato:** Il Quarzo Ialino amplifica tutte le intenzioni positive.`;
+  if (q.includes('erb') || q.includes('cristall') || q.includes('purific') || q.includes('incens') || q.includes('chakra') || q.includes('candela')) {
+    return `🌿 **Alchimia dei Cristalli & Piante Sacre:**\nLe vibrazioni della natura sono alleate preziose nel tuo lavoro quotidiano.\n\n- **Purificazione Spazi:** Salvia Bianca, Rosmarino e Resina di Incenso Olibano diffusi in senso orario.\n- **Apertura del Cuore & Armonia:** Quarzo Rosa, Rodocrosite e infuso di Melissa o Petali di Rosa.\n- **Chiarezza Intuitiva (Terzo Occhio):** Lapislazzuli, Ametista e gocce di olio essenziale di Lavanda Vera sulle tempie.`;
   }
 
-  return `✨ **Parola dell'Oracolo:**\n"L'Universo parla il linguaggio dei simboli, del silenzio e dell'armonia interiore."\n\nQualunque sia la domanda del tuo cuore in questo istante, fidati del tuo discernimento e della tua luce. Rimani centrata nel tuo tempio interiore e le risposte emergeranno con naturalezza e limpidezza.\n\n🌿 *Benedizioni di pace e grazia sul tuo cammino.*`;
+  return `✨ **Parola dell'Oracolo per Maria Teresa:**\n"L'Universo parla il linguaggio dei simboli, della presenza e della risonanza del cuore."\n\nQualunque sia il quesito che porti oggi nel tuo santuario, fidati del tuo discernimento e della saggezza che risiede dentro di te. Rimani centrata nella tua luce e ogni risposta si manifesterà con perfetta sincronicità.\n\n🌿 *Pace, luce e benedizioni sui tuoi passi.*`;
 }
