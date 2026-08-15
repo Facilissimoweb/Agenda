@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Appointment, 
   Contact, 
@@ -27,6 +27,17 @@ import { RubricaView } from './components/views/RubricaView';
 import { DiarioView } from './components/views/DiarioView';
 import { StrumentiView } from './components/views/StrumentiView';
 import { ChatView } from './components/views/ChatView';
+import { SupabaseAuthModal } from './components/modals/SupabaseAuthModal';
+import { 
+  getSupabaseConfig, 
+  testSupabaseConnection, 
+  downloadAllCloudData,
+  uploadAppointmentsToCloud,
+  uploadContactsToCloud,
+  uploadCycleDataToCloud,
+  uploadWeeklyMenuToCloud,
+  uploadJournalNotesToCloud
+} from './services/supabaseClient';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -85,30 +96,85 @@ export default function App() {
     message: '',
   });
 
-  // Sync to LocalStorage
+  // Cloud state
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const initialLoadDone = useRef<boolean>(false);
+
+  // Check Supabase on Mount & Download Data
+  useEffect(() => {
+    const initCloud = async () => {
+      const config = getSupabaseConfig();
+      if (config.url && config.anonKey) {
+        const testRes = await testSupabaseConnection();
+        setIsCloudConnected(testRes.success);
+        if (testRes.success) {
+          // Download initial cloud data
+          const cloudRes = await downloadAllCloudData();
+          if (cloudRes.success && cloudRes.data) {
+            if (cloudRes.data.appointments && cloudRes.data.appointments.length > 0) {
+              setAppointments(cloudRes.data.appointments);
+            }
+            if (cloudRes.data.contacts && cloudRes.data.contacts.length > 0) {
+              setContacts(cloudRes.data.contacts);
+            }
+            if (cloudRes.data.cycleData) {
+              setCycleData(cloudRes.data.cycleData);
+            }
+            if (cloudRes.data.weeklyMenu && Object.keys(cloudRes.data.weeklyMenu).length > 0) {
+              setWeeklyMenu(cloudRes.data.weeklyMenu);
+            }
+            if (cloudRes.data.journalNotes && cloudRes.data.journalNotes.length > 0) {
+              setJournalNotes(cloudRes.data.journalNotes);
+            }
+          }
+        }
+      }
+      initialLoadDone.current = true;
+    };
+    initCloud();
+  }, []);
+
+  // Sync to LocalStorage & Supabase
   useEffect(() => {
     localStorage.setItem('mt_active_tab', activeTab);
   }, [activeTab]);
 
   useEffect(() => {
     localStorage.setItem('mt_appointments', JSON.stringify(appointments));
-  }, [appointments]);
+    if (initialLoadDone.current && isCloudConnected) {
+      uploadAppointmentsToCloud(appointments);
+    }
+  }, [appointments, isCloudConnected]);
 
   useEffect(() => {
     localStorage.setItem('mt_contacts', JSON.stringify(contacts));
-  }, [contacts]);
+    if (initialLoadDone.current && isCloudConnected) {
+      uploadContactsToCloud(contacts);
+    }
+  }, [contacts, isCloudConnected]);
 
   useEffect(() => {
     localStorage.setItem('mt_cycle', JSON.stringify(cycleData));
-  }, [cycleData]);
+    if (initialLoadDone.current && isCloudConnected) {
+      uploadCycleDataToCloud(cycleData);
+    }
+  }, [cycleData, isCloudConnected]);
 
   useEffect(() => {
     localStorage.setItem('mt_menu', JSON.stringify(weeklyMenu));
-  }, [weeklyMenu]);
+    if (initialLoadDone.current && isCloudConnected) {
+      uploadWeeklyMenuToCloud(weeklyMenu);
+    }
+  }, [weeklyMenu, isCloudConnected]);
 
   useEffect(() => {
     localStorage.setItem('mt_notes', JSON.stringify(journalNotes));
-  }, [journalNotes]);
+    if (initialLoadDone.current && isCloudConnected) {
+      uploadJournalNotesToCloud(journalNotes);
+    }
+  }, [journalNotes, isCloudConnected]);
 
   // Toast Helper
   const showToast = (message: string) => {
@@ -117,6 +183,64 @@ export default function App() {
       setToast((prev) => ({ ...prev, show: false }));
     }, 3800);
   };
+
+  // Manual Full Sync (Bi-directional)
+  const handleFullSync = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const config = getSupabaseConfig();
+      if (!config.url || !config.anonKey) {
+        showToast('⚠️ Inserisci prima URL e Anon Key di Supabase.');
+        setIsSyncing(false);
+        return;
+      }
+
+      const testRes = await testSupabaseConnection();
+      if (!testRes.success) {
+        setIsCloudConnected(false);
+        showToast(`⚠️ Connessione fallita: ${testRes.message}`);
+        setIsSyncing(false);
+        return;
+      }
+
+      setIsCloudConnected(true);
+
+      // 1. Upload local data to Supabase
+      await Promise.all([
+        uploadAppointmentsToCloud(appointments),
+        uploadContactsToCloud(contacts),
+        uploadCycleDataToCloud(cycleData),
+        uploadWeeklyMenuToCloud(weeklyMenu),
+        uploadJournalNotesToCloud(journalNotes),
+      ]);
+
+      // 2. Fetch fresh snapshot from Supabase
+      const cloudRes = await downloadAllCloudData();
+      if (cloudRes.success && cloudRes.data) {
+        if (cloudRes.data.appointments && cloudRes.data.appointments.length > 0) {
+          setAppointments(cloudRes.data.appointments);
+        }
+        if (cloudRes.data.contacts && cloudRes.data.contacts.length > 0) {
+          setContacts(cloudRes.data.contacts);
+        }
+        if (cloudRes.data.cycleData) {
+          setCycleData(cloudRes.data.cycleData);
+        }
+        if (cloudRes.data.weeklyMenu && Object.keys(cloudRes.data.weeklyMenu).length > 0) {
+          setWeeklyMenu(cloudRes.data.weeklyMenu);
+        }
+        if (cloudRes.data.journalNotes && cloudRes.data.journalNotes.length > 0) {
+          setJournalNotes(cloudRes.data.journalNotes);
+        }
+      }
+
+      showToast('☁️ Tutti i dati sono stati sincronizzati con Supabase!');
+    } catch (err: any) {
+      showToast(`Errore sincronizzazione: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [appointments, contacts, cycleData, weeklyMenu, journalNotes]);
 
   // Tab Switch Handler
   const handleSelectTab = (tab: TabId) => {
@@ -211,6 +335,8 @@ export default function App() {
             setActiveTab('agenda');
           }}
           appointmentsCount={appointments.length}
+          isCloudConnected={isCloudConnected}
+          onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
         />
 
         {/* Dynamic Views with Fade & Slide Animation */}
@@ -310,6 +436,15 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         appointmentsCount={appointments.length}
+      />
+
+      {/* Supabase Cloud & Auth Modal */}
+      <SupabaseAuthModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onShowToast={showToast}
+        onSyncAll={handleFullSync}
+        isSyncing={isSyncing}
       />
 
       {/* Toast Notification Alert */}

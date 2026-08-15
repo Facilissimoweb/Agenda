@@ -11,7 +11,10 @@ import {
   Home, 
   Sparkles,
   ShieldCheck,
-  MessageSquareText
+  MessageSquareText,
+  Database,
+  CloudCheck,
+  Cloud
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,6 +22,8 @@ interface HeaderProps {
   onSelectTab: (tab: TabId) => void;
   onOpenNewAppointment: () => void;
   appointmentsCount: number;
+  isCloudConnected?: boolean;
+  onOpenSupabaseModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   onOpenNewAppointment,
   appointmentsCount,
+  isCloudConnected,
+  onOpenSupabaseModal,
 }) => {
   const navItems: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number; highlight?: boolean }> = [
     { id: 'home', label: 'Oggi', icon: Home },
@@ -42,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="py-3 sm:py-4 border-b border-[#2a244d]/70 flex items-center justify-between sticky top-0 bg-[#0a0915]/90 backdrop-blur-md z-40 px-3 sm:px-0">
       <button 
         onClick={() => onSelectTab('home')}
-        className="flex items-center gap-2.5 sm:gap-3 group text-left focus:outline-none"
+        className="flex items-center gap-2.5 sm:gap-3 group text-left focus:outline-none cursor-pointer"
       >
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-amber-400/60 flex items-center justify-center bg-[#1d1138] text-amber-300 shadow-md shadow-amber-500/10 group-hover:border-amber-400 transition-all duration-300">
           <span className="text-base sm:text-lg">🌙</span>
@@ -72,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1.5 relative ${
+              className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1.5 relative cursor-pointer ${
                 isActive
                   ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20'
                   : 'text-purple-200 hover:text-amber-300 hover:bg-purple-900/30'
@@ -92,8 +99,24 @@ export const Header: React.FC<HeaderProps> = ({
         })}
       </nav>
 
-      {/* Quick Action Button */}
+      {/* Quick Action Buttons */}
       <div className="flex items-center gap-2">
+        {/* Supabase Cloud Button */}
+        <button
+          onClick={onOpenSupabaseModal}
+          title={isCloudConnected ? "Supabase Cloud Connesso" : "Configura Supabase Cloud Database"}
+          className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-medium border transition cursor-pointer ${
+            isCloudConnected
+              ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+              : 'bg-[#1a1236] border-purple-500/40 text-amber-300 hover:bg-[#271b52]'
+          }`}
+        >
+          <Database className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden md:inline font-mono text-[10px]">
+            {isCloudConnected ? 'Cloud Supabase' : 'Salva su Cloud'}
+          </span>
+        </button>
+
         <button
           onClick={onOpenNewAppointment}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 hover:from-amber-400 hover:to-amber-500 transition-all shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
