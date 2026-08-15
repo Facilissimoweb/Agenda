@@ -56,12 +56,12 @@ const INITIAL_GREETING: ChatMessage = {
 };
 
 const SUGGESTED_QUESTIONS = [
+  { text: '📅 Cosa ho in programma oggi in agenda?', category: 'consulenza' },
+  { text: '🔮 Chi vedo domani per consulti?', category: 'consulenza' },
   { text: '🃏 Carta dei Tarocchi e guida per oggi', category: 'tarocchi' },
-  { text: '🌙 Rituale di purificazione con la Luna attuale', category: 'astrologia' },
-  { text: '📿 Come proteggere il campo aurico durante un consulto?', category: 'consulenza' },
-  { text: '🌿 Quali erbe o cristalli abbinare al Chakra del Cuore?', category: 'rituale' },
-  { text: '🔮 Come interpretare la Papessa nei sentimenti?', category: 'tarocchi' },
-  { text: '💭 Interpretazione di un sogno con simboli d\'acqua e fuoco', category: 'sogno' },
+  { text: '🌙 Influssi della Luna e nutrizione di oggi', category: 'astrologia' },
+  { text: '📿 Come preparare lo spazio per i consulti?', category: 'rituale' },
+  { text: '🌿 Erbe e cristalli per il Chakra del Cuore', category: 'rituale' },
 ];
 
 export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onShowToast }) => {
@@ -243,13 +243,40 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
       content: m.text,
     }));
 
-    // Extra sanctuary context
+    // Extra sanctuary context with full real calendar & agenda details
+    const now = new Date();
+    const todayIso = now.toISOString().split('T')[0];
+    const fullDateFormatted = now.toLocaleDateString('it-IT', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const timeFormatted = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+    let cycleArchetype = "L'Incantatrice (Fase Luteale Creativa)";
+    let cycleDayNumber = 14;
+    if (cycleData?.startDate) {
+      const start = new Date(cycleData.startDate);
+      const diffDays = Math.max(1, Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const cycleLength = cycleData.avgLength || 28;
+      const currentDay = ((diffDays - 1) % cycleLength) + 1;
+      cycleDayNumber = currentDay;
+      if (currentDay <= 5) cycleArchetype = "La Strega / Saggia (Mestruazione - Reset & Intuizione)";
+      else if (currentDay <= 12) cycleArchetype = "La Vergine (Fase Follicolare - Rinascita & Vitalità)";
+      else if (currentDay <= 17) cycleArchetype = "La Madre (Ovulazione - Massima Espansione & Magnetismo)";
+      else cycleArchetype = "L'Incantatrice (Fase Luteale - Creatività & Discernimento)";
+    }
+
     const extraContext = includeSanctuaryContext
       ? {
-          moonPhase: 'Luna Piena in Vergine 🌕',
-          zodiacSign: 'Vergine ♍',
-          cycleArchetype: 'L\'Incantatrice (Fase Luteale Creativa)',
-          todayTarot: 'L\'Imperatrice (III) • Creatività & Fertilità',
+          currentDateIso: todayIso,
+          currentDateFormatted: fullDateFormatted,
+          currentTime: timeFormatted,
+          cycleArchetype,
+          cycleDay: cycleDayNumber,
+          todayTarot: "L'Imperatrice (III) • Creatività & Fertilità",
+          appointments: appointments,
           appointmentsCount: appointments.length,
         }
       : undefined;
@@ -939,7 +966,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
                   onChange={(e) => setIncludeSanctuaryContext(e.target.checked)}
                   className="rounded border-[#2a244d] text-amber-400 focus:ring-amber-400 bg-[#1d1138] w-4 h-4"
                 />
-                <span>Includi dati del Santuario (Fase Lunare, Tarocco, Consulti) nel prompt</span>
+                <span>Includi dati del Santuario (Calendario reale, Agenda consulti, Fase Lunare, Tarocco) nel prompt</span>
               </label>
             </div>
 

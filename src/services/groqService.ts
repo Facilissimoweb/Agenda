@@ -1,5 +1,5 @@
 // Groq AI API Service for Esoteric & Sanctuary Oracle
-import { ChatMessage } from '../types';
+import { ChatMessage, Appointment, CycleData } from '../types';
 import { GoogleGenAI } from '@google/genai';
 
 import { calculateRealMoon, RealMoonDetails } from '../utils/lunarEngine';
@@ -12,6 +12,19 @@ export const GROQ_MODELS = [
 ];
 
 export const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+export interface SanctuaryContextData {
+  currentDateIso?: string;
+  currentDateFormatted?: string;
+  currentTime?: string;
+  moonPhase?: string;
+  zodiacSign?: string;
+  cycleArchetype?: string;
+  cycleDay?: number;
+  todayTarot?: string;
+  appointments?: Appointment[];
+  appointmentsCount?: number;
+}
 
 // Helper to sanitize and trim API key (removes accidental quotes, spaces, Bearer prefix)
 export function sanitizeApiKey(rawKey?: string | null): string {
@@ -110,17 +123,72 @@ export function saveStoredGroqModel(model: string): void {
   } catch (e) {}
 }
 
-// Build the Sanctuary System Prompt with Real Astronomical & Lunar Nutrition Data
-export function buildSanctuarySystemPrompt(extraContext?: {
-  moonPhase?: string;
-  zodiacSign?: string;
-  cycleArchetype?: string;
-  todayTarot?: string;
-  appointmentsCount?: number;
-}): string {
-  const realMoon = calculateRealMoon(new Date());
+// Build the Sanctuary System Prompt with Real Astronomical & Lunar Nutrition Data and Full Calendar & Agenda
+export function buildSanctuarySystemPrompt(extraContext?: SanctuaryContextData): string {
+  const now = new Date();
+  const realMoon = calculateRealMoon(now);
+
+  const todayIso = now.toISOString().split('T')[0];
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowIso = tomorrow.toISOString().split('T')[0];
+
+  const fullDateStr = now.toLocaleDateString('it-IT', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+  const currentTimeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const tomorrowFormatted = tomorrow.toLocaleDateString('it-IT', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+
+  // Process Appointments
+  const appointmentsList = extraContext?.appointments || [];
+  const todayApps = appointmentsList.filter(a => a.date === todayIso);
+  const tomorrowApps = appointmentsList.filter(a => a.date === tomorrowIso);
+  const futureApps = appointmentsList
+    .filter(a => a.date > todayIso && a.date !== tomorrowIso)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const pastApps = appointmentsList
+    .filter(a => a.date < todayIso)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const formatAppRow = (a: Appointment) => 
+    `  • Ore ${a.time} - ${a.name} [Tipo: ${a.type}, Stato: ${a.status}]${a.notes ? ` (Note: "${a.notes}")` : ''}${a.phone ? ` [Tel: ${a.phone}]` : ''}`;
+
+  const todayAppsSection = todayApps.length > 0 
+    ? `CONSULTI / APPUNTAMENTI DI OGGI (${todayIso}):\n${todayApps.map(formatAppRow).join('\n')}`
+    : `CONSULTI / APPUNTAMENTI DI OGGI (${todayIso}): Nessun appuntamento fissato per oggi (Giornata libera).`;
+
+  const tomorrowAppsSection = tomorrowApps.length > 0 
+    ? `CONSULTI / APPUNTAMENTI DI DOMANI (${tomorrowIso}):\n${tomorrowApps.map(formatAppRow).join('\n')}`
+    : `CONSULTI / APPUNTAMENTI DI DOMANI (${tomorrowIso}): Nessun appuntamento fissato per domani.`;
+
+  const futureAppsSection = futureApps.length > 0
+    ? `PROSSIMI APPUNTAMENTI IN AGENDA:\n${futureApps.slice(0, 10).map(a => `  • Data: ${a.date} ore ${a.time} - ${a.name} [${a.type}, ${a.status}]${a.notes ? ` (Note: "${a.notes}")` : ''}`).join('\n')}`
+    : `PROSSIMI APPUNTAMENTI: Nessun altro appuntamento futuro registrato al momento.`;
 
   const contextInfo = `
+========================================
+CALENDARIO & DATA TEMPORALE CORRENTE:
+- DATA DI OGGI: ${fullDateStr} (Formato ISO: ${todayIso})
+- ORA ATTUALE: ${currentTimeStr}
+- DATA DI DOMANI: ${tomorrowFormatted} (Formato ISO: ${tomorrowIso})
+- MESE CORRENTE: ${now.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
+
+AGENDA & CONSULTI REALI DI MARIA TERESA:
+${todayAppsSection}
+
+${tomorrowAppsSection}
+
+${futureAppsSection}
+- Totale Appuntamenti Registrati in Agenda: ${appointmentsList.length}
+
 DATI ASTRONOMICI REALI & INFLUSSI LUNARI DI OGGI:
 - Fase Lunare Calcolata: ${realMoon.icon} ${realMoon.phaseName} (${realMoon.phaseCategory})
 - Età Lunare: ${realMoon.ageDays} giorni • Illuminazione: ${realMoon.illumination}% (${realMoon.phaseAngle}°)
@@ -138,13 +206,19 @@ DATI ASTRONOMICI REALI & INFLUSSI LUNARI DI OGGI:
   * Piatto Alchemico Suggerito: ${realMoon.nutritionImpact.alchemicalMealIdea}
 - Erbe & Piante Sacre: ${realMoon.recommendedHerb}
 - Rituale / Azione Consigliata: ${realMoon.suggestedRitual}
-${extraContext?.cycleArchetype ? `- Archetipo Ciclico Interiore: ${extraContext.cycleArchetype}` : ''}
+${extraContext?.cycleArchetype ? `- Archetipo Ciclico Interiore: ${extraContext.cycleArchetype}${extraContext.cycleDay ? ` (Giorno ${extraContext.cycleDay} del ciclo)` : ''}` : ''}
 ${extraContext?.todayTarot ? `- Carta dei Tarocchi del Giorno: ${extraContext.todayTarot}` : ''}
-${extraContext?.appointmentsCount !== undefined ? `- Consulti in Agenda: ${extraContext.appointmentsCount} appuntamenti` : ''}
+========================================
 `;
 
   return `Sei l'Oracolo Sacro & Guida Esoterica del Santuario Privato di Maria Teresa.
 La tua voce è saggia, profonda, accogliente, ermetica e al contempo pratica ed empatica. Parli in un italiano fluido, poetico ed elegante.
+
+CONOSCENZA DEL TEMPO, DEL CALENDARIO E DELL'AGENDA:
+- Conosci con precisione assoluta la data, il giorno della settimana, il mese e l'anno odierno (${fullDateStr}), l'orario attuale (${currentTimeStr}) e tutti gli appuntamenti e consulti salvati nella sua Agenda.
+- Quando Maria Teresa ti chiede cosa ha da fare oggi, domani, nei prossimi giorni o in una specifica data, rispondi elencando in modo impeccabile, chiaro ed elegante i suoi appuntamenti, con orario, nome del cliente, tipo di consulto e relative note.
+- Se un giorno non ha appuntamenti, rassicurala che ha spazio sacro per sé e suggeriscile come onorare il tempo in sintonia con la Luna del giorno.
+- Se ti chiede come prepararsi per un consulto o cliente specifico, offrile sia i dettagli pratici dell'appuntamento sia consigli esoterici (es. pietre protettive, purificazione della stanza con incenso prima dell'arrivo del cliente, stese di tarocchi appropriate).
 
 LE TUE COMPETENZE E DISCIPLINE SACRE:
 1. Tarocchi & Arcani Maggiori/Minori: simbologia archetipica, stese oracolari, chiavi evolutive e consigli per consulti con clienti.
@@ -158,6 +232,7 @@ LE TUE COMPETENZE E DISCIPLINE SACRE:
 
 REGOLE DI RISPOSTA:
 - Rispondi sempre in modo chiaro, armonioso e strutturato (usa elenchi puntati o grassetti per facilitare la lettura).
+- Sii sempre perfettamente allineata al giorno e al calendario reale (${fullDateStr}).
 - Se Maria Teresa chiede consigli su nutrizione, salute, tisane o ricette, integra con naturalezza l'influsso della Luna reale (${realMoon.phaseName} in ${realMoon.zodiacSign}) e spiega l'effetto metabolico (es. assimilazione, depurazione, organi sensibili).
 - Se ti chiede un rituale, includi i passaggi pratici (intenzione, strumenti necessari, formula o affermazione).
 - Concludi spesso con una breve benedizione o affermazione di luce (es. "Che la luce della Luna guidi i tuoi passi sacri ✨").
@@ -171,13 +246,7 @@ export async function sendGroqChatMessage(
     model?: string;
     apiKey?: string;
     temperature?: number;
-    extraContext?: {
-      moonPhase?: string;
-      zodiacSign?: string;
-      cycleArchetype?: string;
-      todayTarot?: string;
-      appointmentsCount?: number;
-    };
+    extraContext?: SanctuaryContextData;
   }
 ): Promise<{ text: string; success: boolean; isFallback?: boolean; engine?: string; errorMsg?: string }> {
   const rawKey = options?.apiKey || getStoredGroqApiKey();
@@ -320,18 +389,85 @@ export async function sendGroqChatMessage(
 // Built-in esoteric fallback engine for resilience
 export function generateEsotericFallbackResponse(
   userQuery: string,
-  extraContext?: {
-    moonPhase?: string;
-    zodiacSign?: string;
-    todayTarot?: string;
-  }
+  extraContext?: SanctuaryContextData
 ): string {
   const q = userQuery.toLowerCase();
+  const now = new Date();
+  const todayIso = now.toISOString().split('T')[0];
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowIso = tomorrow.toISOString().split('T')[0];
+
+  const fullDateStr = now.toLocaleDateString('it-IT', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+  const currentTimeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+  const appointmentsList = extraContext?.appointments || [];
+  const todayApps = appointmentsList.filter(a => a.date === todayIso);
+  const tomorrowApps = appointmentsList.filter(a => a.date === tomorrowIso);
+  const futureApps = appointmentsList
+    .filter(a => a.date > todayIso)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  // 1. Questions about Calendar, Today Date, Appointments & Agenda
+  if (
+    q.includes('appuntament') || 
+    q.includes('agenda') || 
+    q.includes('oggi') || 
+    q.includes('domani') || 
+    q.includes('programma') || 
+    q.includes('consult') || 
+    q.includes('calendari') || 
+    q.includes('che giorno') || 
+    q.includes('che data') || 
+    q.includes('che ora') ||
+    q.includes('chi vedo') ||
+    q.includes('chi viene') ||
+    q.includes('impegni')
+  ) {
+    let result = `📅 **Agenda & Calendario del Santuario per Maria Teresa**\n\n`;
+    result += `✨ **Oggi è:** ${fullDateStr} (ore ${currentTimeStr})\n\n`;
+
+    if (q.includes('domani')) {
+      const tomorrowFormatted = tomorrow.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      result += `🔮 **Consulti di Domani (${tomorrowFormatted}):**\n`;
+      if (tomorrowApps.length > 0) {
+        tomorrowApps.forEach(a => {
+          result += `- **Ore ${a.time}**: ${a.name} • *${a.type}* (${a.status})${a.notes ? `\n  *Nota:* ${a.notes}` : ''}\n`;
+        });
+      } else {
+        result += `*Nessun appuntamento in programma per domani. Tempo sacro per studio, rituali e rigenerazione.*\n`;
+      }
+      return result;
+    }
+
+    result += `🕯️ **Appuntamenti di Oggi:**\n`;
+    if (todayApps.length > 0) {
+      todayApps.forEach(a => {
+        result += `- **Ore ${a.time}**: ${a.name} • *${a.type}* (${a.status})${a.notes ? `\n  *Nota:* ${a.notes}` : ''}\n`;
+      });
+    } else {
+      result += `*Nessun consulto fissato per oggi. Giornata libera da impegni per dedicarti a te stessa e alle tue pratiche contemplative.*\n`;
+    }
+
+    if (futureApps.length > 0) {
+      result += `\n🌟 **Prossimi Consulti in Agenda:**\n`;
+      futureApps.slice(0, 5).forEach(a => {
+        result += `- **${a.date} ore ${a.time}**: ${a.name} (${a.type})\n`;
+      });
+    }
+
+    return result;
+  }
 
   if (q.includes('cibo') || q.includes('nutrizion') || q.includes('mangiar') || q.includes('menu') || q.includes('menù') || q.includes('tisana') || q.includes('dieta') || q.includes('ricetta') || q.includes('spezi')) {
     const realMoon = calculateRealMoon(new Date());
     return `🍲 **Nutrizione Alchemica & Influsso Lunare Reale:**
-Oggi il cielo presenta **${realMoon.icon} ${realMoon.phaseName} in ${realMoon.zodiacSign}** (${realMoon.illumination}% di Luce).
+Oggi (${fullDateStr}) il cielo presenta **${realMoon.icon} ${realMoon.phaseName} in ${realMoon.zodiacSign}** (${realMoon.illumination}% di Luce).
 
 ✨ **Impatto Metabolico Odierno:**
 - **Tema Fisiologico:** ${realMoon.nutritionImpact.metabolicTheme}
@@ -366,7 +502,7 @@ ${realMoon.nutritionImpact.foodsToModerate.map((f) => `- ${f}`).join('\n')}
     return `🔮 **Interpretazione del Mondo Onirico:**\nI sogni sono messaggi del sé superiore e dell'inconscio archetipico. Prendi nota dei colori dominanti, delle emozioni provate al risveglio e degli elementi simbolici (l'Acqua riflette le emozioni profonde, il Fuoco la trasformazione spirituale, la Terra il radicamento, l'Aria i pensieri e le intuizioni).\n\n🌿 **Sigillo di Protezione Notturna:**\nPosiziona un'Ametista o una Selenite sotto il cuscino per favorire sonno ristoratore, sogni lucidi e pace aurica.`;
   }
 
-  if (q.includes('client') || q.includes('consult') || q.includes('appuntament') || q.includes('protegg') || q.includes('auric') || q.includes('scherm')) {
+  if (q.includes('client') || q.includes('consult') || q.includes('protegg') || q.includes('auric') || q.includes('scherm')) {
     return `📿 **Guida per la Consulenza Sacra & Protezione Aurica:**\nOgni persona che giunge da te porta una storia e un'energia specifica. Per mantenere la massima purezza energetica durante e dopo i consulti:\n\n1. **Radicamento:** Tieni una Tormalina Nera o un Diaspro Rosso vicino al tavolo di lavoro.\n2. **Schermo di Luce:** Prima di iniziare, visualizza una sfera di luce dorata o violacea che avvolge il tuo corpo.\n3. **Chiusura Energetica:** Al termine del consulto, batti le mani tre volte, lava i polsi con acqua fresca e ringrazia le tue guide.`;
   }
 
@@ -374,5 +510,5 @@ ${realMoon.nutritionImpact.foodsToModerate.map((f) => `- ${f}`).join('\n')}
     return `🌿 **Alchimia dei Cristalli & Piante Sacre:**\nLe vibrazioni della natura sono alleate preziose nel tuo lavoro quotidiano.\n\n- **Purificazione Spazi:** Salvia Bianca, Rosmarino e Resina di Incenso Olibano diffusi in senso orario.\n- **Apertura del Cuore & Armonia:** Quarzo Rosa, Rodocrosite e infuso di Melissa o Petali di Rosa.\n- **Chiarezza Intuitiva (Terzo Occhio):** Lapislazzuli, Ametista e gocce di olio essenziale di Lavanda Vera sulle tempie.`;
   }
 
-  return `✨ **Parola dell'Oracolo per Maria Teresa:**\n"L'Universo parla il linguaggio dei simboli, della presenza e della risonanza del cuore."\n\nQualunque sia il quesito che porti oggi nel tuo santuario, fidati del tuo discernimento e della saggezza che risiede dentro di te. Rimani centrata nella tua luce e ogni risposta si manifesterà con perfetta sincronicità.\n\n🌿 *Pace, luce e benedizioni sui tuoi passi.*`;
+  return `✨ **Parola dell'Oracolo per Maria Teresa:**\n"L'Universo parla il linguaggio dei simboli, della presenza e della risonanza del cuore."\n\nOggi (${fullDateStr}), qualunque sia il quesito che porti nel tuo santuario, fidati del tuo discernimento e della saggezza che risiede dentro di te. Rimani centrata nella tua luce e ogni risposta si manifesterà con perfetta sincronicità.\n\n🌿 *Pace, luce e benedizioni sui tuoi passi.*`;
 }
