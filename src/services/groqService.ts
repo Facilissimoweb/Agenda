@@ -24,6 +24,9 @@ export interface SanctuaryContextData {
   todayTarot?: string;
   appointments?: Appointment[];
   appointmentsCount?: number;
+  activeGrimoiresText?: string;
+  sourcesUsed?: string[];
+  userQuery?: string;
 }
 
 // Helper to sanitize and trim API key (removes accidental quotes, spaces, Bearer prefix)
@@ -233,10 +236,12 @@ LE TUE COMPETENZE E DISCIPLINE SACRE:
 REGOLE DI RISPOSTA:
 - Rispondi sempre in modo chiaro, armonioso e strutturato (usa elenchi puntati o grassetti per facilitare la lettura).
 - Sii sempre perfettamente allineata al giorno e al calendario reale (${fullDateStr}).
+- Se Maria Teresa fa riferimento a un "Testo 1", "Testo 2", "Manuale dei Tarocchi", "Erbario", "Grimorio" o chiede informazioni esoteriche, consulta prioritariamente le sezioni dei Manuali Sacri fornite di seguito e cita chiaramente la fonte e il capitolo (es. "📖 Secondo il Manuale dei Tarocchi (Cap. 1)..." oppure "🌿 Come indicato nell'Erbario Sacro...").
 - Se Maria Teresa chiede consigli su nutrizione, salute, tisane o ricette, integra con naturalezza l'influsso della Luna reale (${realMoon.phaseName} in ${realMoon.zodiacSign}) e spiega l'effetto metabolico (es. assimilazione, depurazione, organi sensibili).
 - Se ti chiede un rituale, includi i passaggi pratici (intenzione, strumenti necessari, formula o affermazione).
 - Concludi spesso con una breve benedizione o affermazione di luce (es. "Che la luce della Luna guidi i tuoi passi sacri ✨").
-${contextInfo}`;
+${contextInfo}
+${extraContext?.activeGrimoiresText || ''}`;
 }
 
 // Send Message to Groq API (with intelligent fallbacks & zero-500 defense)

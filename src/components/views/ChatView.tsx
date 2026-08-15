@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChatMessage, Appointment, CycleData } from '../../types';
+import { ChatMessage, Appointment, CycleData, SacredBook } from '../../types';
 import { 
   sendGroqChatMessage, 
   getStoredGroqApiKey, 
@@ -17,6 +17,13 @@ import {
   isSpeechRecognitionSupported, 
   isSpeechSynthesisSupported 
 } from '../../utils/speech';
+import { 
+  getStoredGrimoires, 
+  saveStoredGrimoires, 
+  toggleGrimoireEnabled, 
+  buildGrimoireContextForQuery 
+} from '../../services/grimoireService';
+import { GrimoireModal } from '../modals/GrimoireModal';
 import { 
   Mic, 
   MicOff, 
@@ -37,7 +44,12 @@ import {
   Radio,
   Info,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  BookOpen,
+  BookMarked,
+  Book,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -52,19 +64,20 @@ interface ChatViewProps {
 const INITIAL_GREETING: ChatMessage = {
   id: 'msg-welcome',
   sender: 'assistant',
-  text: `Salute a te, Maria Teresa. ✨ Sono la tua **Guida Esoterica & Oracolo Alchemico**, alimentata dal motore AI di Groq (Llama 3.3).\n\nPuoi parlarmi digitando un messaggio oppure **premendo l'icona del microfono 🎙️** per parlare a voce libera. Se desideri ascoltare le mie risposte, premi l'icona **"Leggi Vocale" 🔊** accanto a qualsiasi messaggio.\n\n*Come posso illuminare il tuo cammino, i tuoi rituali o i tuoi consulti oggi?*`,
+  text: `Salute a te, Maria Teresa. ✨ Sono la tua **Guida Esoterica & Oracolo Alchemico**, alimentata dal motore AI di Groq (Llama 3.3) e connessa ai tuoi **Grimori & Manuali Sacri**.\n\nPuoi parlarmi digitando un messaggio, **premendo il microfono 🎙️**, oppure chiedendomi di consultare un testo specifico (es. *"Secondo il Manuale Tarocchi..."*, *"Guarda nell'Erbario..."*).\n\n*Come posso illuminare il tuo cammino, i tuoi rituali o i tuoi consulti oggi?*`,
   timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
   category: 'generale',
+  sourcesUsed: ['🃏 Manuale Tarocchi', '🌌 Trattato Astrologia', '🌿 Erbario Sacro'],
 };
 
 const SUGGESTED_QUESTIONS = [
+  { text: '📖 Spiegami il Bagatto secondo il Manuale dei Tarocchi', category: 'tarocchi' },
   { text: '🌌 Analizza un Tema Natale e i transiti attuali', category: 'astrologia' },
+  { text: '🌿 Quali erbe e cristalli usare per purificare lo spazio?', category: 'rituale' },
   { text: '📅 Cosa ho in programma oggi in agenda?', category: 'consulenza' },
-  { text: '🔮 Chi vedo domani per consulti?', category: 'consulenza' },
-  { text: '🃏 Carta dei Tarocchi e guida per oggi', category: 'tarocchi' },
-  { text: '🌙 Influssi della Luna e nutrizione di oggi', category: 'astrologia' },
-  { text: '📿 Come preparare lo spazio per i consulti?', category: 'rituale' },
-  { text: '🌿 Erbe e cristalli per il Chakra del Cuore', category: 'rituale' },
+  { text: '🕯️ Rituale consigliato per la fase lunare odierna', category: 'rituale' },
+  { text: '🔮 Chi vedo domani per consulti in agenda?', category: 'consulenza' },
+  { text: '🌙 Influssi metabolici della Luna di oggi', category: 'astrologia' },
 ];
 
 export const ChatView: React.FC<ChatViewProps> = ({ 
@@ -91,6 +104,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
+  // Books / Grimoires State
+  const [books, setBooks] = useState<SacredBook[]>(() => getStoredGrimoires());
+  const [isGrimoireModalOpen, setIsGrimoireModalOpen] = useState(false);
+  const [showCompactStatus, setShowCompactStatus] = useState(false);
+
   // Settings & Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(() => getStoredGroqApiKey());
@@ -111,7 +129,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Handle incoming pending prompt from Journal
+  // Handle incoming pending prompt
   useEffect(() => {
     if (pendingPrompt && pendingPrompt.trim()) {
       setInputMessage(pendingPrompt);
@@ -166,11 +184,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // Initialize Speech Recognition
   const toggleSpeechRecognition = () => {
-    if (!isSpeechRecognitionSupported()) {
-      onShowToast('Il tuo browser non supporta il microfono per la dettatura vocale. Usa Google Chrome o Edge.');
-      return;
-    }
-
     if (isRecording) {
       if (recognitionRef.current) {
         try {
@@ -181,63 +194,66 @@ export const ChatView: React.FC<ChatViewProps> = ({
       return;
     }
 
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
+    if (!isSpeechRecognitionSupported()) {
+      onShowToast('Riconoscimento vocale non supportato in questo browser.');
+      return;
+    }
 
-      recognition.lang = 'it-IT';
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
-      recognition.onstart = () => {
-        setIsRecording(true);
-        setSpeechTranscript('');
-      };
+    recognition.onstart = () => {
+      setIsRecording(true);
+      setSpeechTranscript('');
+      onShowToast('🎙️ Microfono attivo... parla pure!');
+    };
 
-      recognition.onresult = (event: any) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          currentTranscript += event.results[i][0].transcript;
-        }
-        setSpeechTranscript(currentTranscript);
-      };
+    recognition.onresult = (event: any) => {
+      let currentTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        currentTranscript += event.results[i][0].transcript;
+      }
+      setSpeechTranscript(currentTranscript);
+    };
 
-      recognition.onerror = (event: any) => {
-        setIsRecording(false);
-        if (event.error === 'not-allowed') {
-          onShowToast('Permesso microfono negato. Consenti l\'accesso al microfono nel browser.');
-        } else if (event.error !== 'no-speech') {
-          onShowToast(`Errore microfono: ${event.error}`);
-        }
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
+    recognition.onerror = (event: any) => {
       setIsRecording(false);
-      onShowToast(`Impossibile avviare il microfono: ${err.message}`);
+      if (event.error !== 'no-speech') {
+        onShowToast(`Errore microfono: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (err) {
+      setIsRecording(false);
     }
   };
 
-  // Confirm transcript and put it into input or send
-  const handleApplyVoiceTranscript = (sendImmediately: boolean = false) => {
+  // Apply voice transcript to input
+  const handleApplyVoiceTranscript = (autoSend: boolean = false) => {
+    if (!speechTranscript.trim()) return;
     const textToSend = speechTranscript.trim();
-    if (!textToSend) return;
+    setInputMessage(textToSend);
+    setSpeechTranscript('');
+    setIsRecording(false);
 
-    if (sendImmediately) {
-      handleSendMessage(textToSend);
-      setSpeechTranscript('');
+    if (autoSend) {
+      setTimeout(() => {
+        handleSendMessage(textToSend);
+      }, 100);
     } else {
-      setInputMessage((prev) => (prev ? `${prev} ${textToSend}` : textToSend));
-      setSpeechTranscript('');
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
     }
   };
 
@@ -246,7 +262,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     const text = (customText || inputMessage).trim();
     if (!text || isLoading) return;
 
-    // Stop speech synthesis if playing
+    // Stop ongoing audio
     stopSpeaking();
     setSpeakingMessageId(null);
 
@@ -293,6 +309,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
       else cycleArchetype = "L'Incantatrice (Fase Luteale - Creatività & Discernimento)";
     }
 
+    // Build RAG / Knowledge Base Context from Active Grimoires
+    const { contextText: grimoiresText, sourcesUsed } = buildGrimoireContextForQuery(text, books);
+
     const extraContext = includeSanctuaryContext
       ? {
           currentDateIso: todayIso,
@@ -303,6 +322,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
           todayTarot: "L'Imperatrice (III) • Creatività & Fertilità",
           appointments: appointments,
           appointmentsCount: appointments.length,
+          activeGrimoiresText: grimoiresText,
+          sourcesUsed: sourcesUsed,
+          userQuery: text,
         }
       : undefined;
 
@@ -317,6 +339,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         sender: 'assistant',
         text: response.text,
         timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        sourcesUsed: sourcesUsed.length > 0 ? sourcesUsed : undefined,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
@@ -460,130 +483,126 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   const hasConfiguredKey = !!(keyDetails.key || apiKeyInput.trim());
+  const activeBooksCount = books.filter((b) => b.isEnabled).length;
 
   return (
-    <div className="space-y-3 sm:space-y-4 flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-160px)] min-h-[580px]">
-      {/* Top Header Bar */}
-      <div className="bg-[#131127] border border-[#2a244d] p-3 sm:p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-md shadow-amber-500/10 text-xl">
+    <div className="flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-145px)] max-w-4xl mx-auto space-y-2 pb-16 sm:pb-2">
+      {/* Sleek, Compact Mobile-First Header Bar */}
+      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] px-3 py-2 sm:px-4 sm:py-3 rounded-2xl flex items-center justify-between gap-2 shadow-lg flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-sm text-base sm:text-lg">
               🔮
             </div>
-            <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 border-2 border-[#131127] rounded-full ${hasConfiguredKey ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-[#120f26] rounded-full ${hasConfiguredKey ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-cinzel font-bold text-sm sm:text-base text-white gold-gradient-text">
-                Oracolo & Guida Esoterica AI
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="font-cinzel font-bold text-xs sm:text-sm text-white gold-gradient-text truncate">
+                Oracolo AI
               </h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 border border-amber-400/40 text-amber-300 font-mono font-semibold">
+              <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-md bg-purple-950/90 border border-amber-400/30 text-amber-300 font-mono font-semibold">
                 Llama 3.3 70B
               </span>
             </div>
 
-            <p className="text-[11px] text-purple-300/80 font-light flex items-center gap-1.5 flex-wrap">
-              {keyDetails.source === 'vercel_vite' && (
-                <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                  <CheckCircle2 className="w-3 h-3" /> Vercel (VITE_GROQ_API_KEY): Attiva
-                </span>
+            <button
+              onClick={() => setShowCompactStatus(!showCompactStatus)}
+              className="text-[10px] text-purple-300/80 hover:text-amber-300 flex items-center gap-1 cursor-pointer truncate"
+            >
+              {keyDetails.source.startsWith('vercel') ? (
+                <span className="text-emerald-400 font-medium">● Vercel Attiva</span>
+              ) : keyDetails.source === 'local' ? (
+                <span className="text-emerald-400 font-medium">● Chiave Locale</span>
+              ) : (
+                <span className="text-amber-300 font-medium">● Offline / Oracolo</span>
               )}
-              {keyDetails.source === 'vercel_groq' && (
-                <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                  <CheckCircle2 className="w-3 h-3" /> Vercel (GROQ_API_KEY): Attiva
-                </span>
-              )}
-              {keyDetails.source === 'local' && (
-                <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                  <CheckCircle2 className="w-3 h-3" /> Chiave Browser Salvata
-                </span>
-              )}
-              {keyDetails.source === 'none' && (
-                <span className="text-amber-300 flex items-center gap-1 font-medium">
-                  <AlertCircle className="w-3 h-3 text-amber-400" /> Modalità Oracolare & Risposte Locali
-                </span>
-              )}
-              <span>•</span>
-              <span className="text-purple-300/90 flex items-center gap-0.5">
-                <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
-                Microfono & Voce
-              </span>
-            </p>
+              <span className="text-purple-400/60">•</span>
+              <span className="text-amber-300/90 font-medium">{activeBooksCount} Grimori attivi</span>
+              {showCompactStatus ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+            </button>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2 text-xs">
-          {/* Sanctuary Context Toggle */}
+        <div className="flex items-center gap-1 sm:gap-1.5 text-xs flex-shrink-0">
+          {/* Books / Grimoires Button */}
           <button
-            onClick={() => {
-              setIncludeSanctuaryContext(!includeSanctuaryContext);
-              onShowToast(
-                !includeSanctuaryContext
-                  ? 'Sincronizzazione dati Santuario (Luna, Tarocco, Agenda) ATTIVATA'
-                  : 'Sincronizzazione dati Santuario DISATTIVATA'
-              );
-            }}
-            title="Includi contesto lunare e del santuario nelle risposte"
-            className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition text-[11px] ${
-              includeSanctuaryContext
-                ? 'bg-purple-900/50 border-amber-400/40 text-amber-300'
-                : 'bg-[#1d1138] border-[#2a244d] text-purple-300 hover:text-white'
-            }`}
+            onClick={() => setIsGrimoireModalOpen(true)}
+            className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 border border-amber-400/40 text-amber-300 font-semibold flex items-center gap-1 transition active:scale-95 cursor-pointer text-[11px] sm:text-xs shadow-sm"
+            title="Gestisci Manuali & Grimori Sacri"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Contesto Santuario</span>
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Manuali</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-bold text-[9px]">
+              {activeBooksCount}
+            </span>
           </button>
 
           {/* Settings / API Key Button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition active:scale-95 cursor-pointer text-xs ${
+            title="Impostazioni Groq & Modello"
+            className={`p-2 rounded-xl border flex items-center justify-center transition active:scale-95 cursor-pointer ${
               hasConfiguredKey
-                ? 'bg-[#1d1138] border-[#2a244d] text-purple-200 hover:text-amber-300 hover:border-amber-400/40'
+                ? 'bg-[#1b153f] border-[#2a244d] text-purple-200 hover:text-amber-300 hover:border-amber-400/40'
                 : 'bg-amber-400/20 border-amber-400 text-amber-300 animate-pulse'
             }`}
           >
-            <Key className="w-3.5 h-3.5 text-amber-400" />
-            <span>{hasConfiguredKey ? 'Impostazioni Groq' : 'Inserisci Chiave Groq'}</span>
+            <Settings className="w-3.5 h-3.5" />
           </button>
 
           {/* Clear History Button */}
           <button
             onClick={handleClearHistory}
             title="Pulisci cronologia messaggi"
-            className="p-2 rounded-xl bg-[#1d1138] border border-[#2a244d] text-purple-300 hover:text-rose-400 hover:border-rose-500/40 transition active:scale-95 cursor-pointer"
+            className="p-2 rounded-xl bg-[#1b153f] border border-[#2a244d] text-purple-300 hover:text-rose-400 hover:border-rose-500/40 transition active:scale-95 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
+      {/* Expandable Status Bar if user clicks status */}
+      {showCompactStatus && (
+        <div className="bg-[#15112e] border border-purple-500/20 p-2.5 sm:p-3 rounded-2xl text-[11px] text-purple-200/90 space-y-1.5 animate-in slide-in-from-top-2 duration-150 flex-shrink-0">
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className="text-amber-300 font-semibold">Fonte Chiave Groq:</span>
+            <span>{keyDetails.source} ({keyDetails.maskedKey || 'Nessuna'})</span>
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className="text-purple-300 font-medium">Contesto Santuario (Luna & Agenda):</span>
+            <span className="text-emerald-400">{includeSanctuaryContext ? 'Attivo' : 'Disattivato'}</span>
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className="text-purple-300 font-medium">Libri consultati nelle risposte:</span>
+            <span className="text-amber-300">{books.filter(b => b.isEnabled).map(b => b.title).join(', ') || 'Nessuno'}</span>
+          </div>
+        </div>
+      )}
+
       {/* Quick Setup Banner if No API Key is active */}
       {!hasConfiguredKey && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#131127] border border-amber-400/40 p-3 sm:p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3 shadow-lg flex-shrink-0 animate-in fade-in">
-          <div className="flex items-center gap-2.5 text-xs text-amber-200 w-full md:w-auto">
-            <Info className="w-5 h-5 text-amber-400 flex-shrink-0" />
-            <div>
-              <p className="font-semibold text-white">Attiva subito Groq AI (Llama 3.3 70B)</p>
-              <p className="text-[11px] text-purple-200/80">
-                Incolla qui la tua chiave Groq (<code>gsk_...</code>) oppure impostala come <code>VITE_GROQ_API_KEY</code> su Vercel.
-              </p>
-            </div>
+        <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#131127] border border-amber-400/40 p-2.5 sm:p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2 shadow-lg flex-shrink-0 animate-in fade-in text-xs">
+          <div className="flex items-center gap-2 text-amber-200 w-full sm:w-auto">
+            <Info className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <p className="text-[11px]">
+              Inserisci la tua chiave <strong>Groq</strong> (<code>gsk_...</code>) per sbloccare la saggezza di Llama 3.3.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
             <input
               type="password"
               value={quickKeyInput}
               onChange={(e) => setQuickKeyInput(e.target.value)}
-              placeholder="Incolla chiave gsk_..."
-              className="bg-[#1d1138] border border-amber-400/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-purple-400/60 focus:outline-none focus:border-amber-400 flex-1 md:w-56 font-mono"
+              placeholder="Incolla gsk_..."
+              className="bg-[#1d1138] border border-amber-400/40 rounded-xl px-2.5 py-1 text-xs text-white placeholder-purple-400/60 focus:outline-none focus:border-amber-400 flex-1 sm:w-44 font-mono"
             />
             <button
               onClick={handleQuickSaveKey}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-md transition active:scale-95 cursor-pointer whitespace-nowrap"
+              className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-xs shadow transition active:scale-95 cursor-pointer whitespace-nowrap"
             >
               Attiva
             </button>
@@ -592,7 +611,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       )}
 
       {/* Main Messages Scrollable Area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1 sm:pr-2 scrollbar-thin scrollbar-thumb-purple-900/40">
+      <div className="flex-1 overflow-y-auto space-y-3 sm:space-y-4 pr-1 sm:pr-2 scrollbar-thin scrollbar-thumb-purple-900/40">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
           const isPlayingThis = speakingMessageId === msg.id && isCurrentlySpeaking();
@@ -600,32 +619,32 @@ export const ChatView: React.FC<ChatViewProps> = ({
           return (
             <div
               key={msg.id}
-              className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+              className={`flex gap-2 sm:gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
             >
               {/* Bot Avatar */}
               {!isUser && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 border border-amber-400/50 flex-shrink-0 flex items-center justify-center text-sm shadow-md text-amber-300 mt-1">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 border border-amber-400/50 flex-shrink-0 flex items-center justify-center text-xs sm:text-sm shadow-md text-amber-300 mt-1">
                   🔮
                 </div>
               )}
 
               <div
-                className={`max-w-[88%] sm:max-w-[78%] rounded-2xl p-4 sm:p-4.5 space-y-2.5 shadow-lg relative text-xs leading-relaxed ${
+                className={`max-w-[90%] sm:max-w-[80%] rounded-2xl p-3 sm:p-4 space-y-2 shadow-lg relative text-xs leading-relaxed ${
                   isUser
-                    ? 'bg-gradient-to-r from-purple-900/80 to-indigo-950/80 border border-purple-500/40 text-purple-50 rounded-tr-sm ml-4'
-                    : 'bg-[#131127] border border-[#2a244d] text-purple-100 rounded-tl-sm'
+                    ? 'bg-gradient-to-r from-purple-900/90 to-indigo-950/90 border border-purple-500/40 text-purple-50 rounded-tr-sm ml-2'
+                    : 'bg-[#14102c] border border-[#2a244d] text-purple-100 rounded-tl-sm'
                 }`}
               >
                 {/* Header info */}
-                <div className="flex items-center justify-between gap-2 border-b border-purple-500/15 pb-1.5 text-[10px] text-purple-300/80">
+                <div className="flex items-center justify-between gap-2 border-b border-purple-500/15 pb-1 text-[10px] text-purple-300/80">
                   <span className="font-semibold font-cinzel text-amber-300/90 flex items-center gap-1">
                     {isUser ? 'Maria Teresa' : 'Oracolo & Guida Esoterica AI'}
                   </span>
                   <span>{msg.timestamp}</span>
                 </div>
 
-                {/* Message Body (Markdown-like formatting support) */}
-                <div className="whitespace-pre-wrap font-light text-slate-100 text-xs sm:text-[13px] leading-relaxed space-y-2">
+                {/* Message Body */}
+                <div className="whitespace-pre-wrap font-light text-slate-100 text-[12px] sm:text-[13px] leading-relaxed space-y-1.5">
                   {msg.text.split('\n\n').map((paragraph, idx) => (
                     <p key={idx}>
                       {paragraph.split('**').map((chunk, cIdx) =>
@@ -641,38 +660,50 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   ))}
                 </div>
 
+                {/* Sources Used Badge if available */}
+                {!isUser && msg.sourcesUsed && msg.sourcesUsed.length > 0 && (
+                  <div className="pt-1.5 mt-1 border-t border-purple-500/15 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-purple-400 font-medium flex items-center gap-1">
+                      <BookMarked className="w-3 h-3 text-amber-400" /> Fonti Consultate:
+                    </span>
+                    {msg.sourcesUsed.map((src, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className="text-[9px] px-2 py-0.5 rounded-md bg-purple-950/80 border border-amber-400/30 text-amber-200 font-medium"
+                      >
+                        {src}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Bottom Action Row for Assistant Messages */}
                 {!isUser && (
-                  <div className="flex items-center justify-between pt-1.5 border-t border-purple-500/15 text-[11px]">
-                    <div className="flex items-center gap-1.5">
-                      {/* Text-to-Speech Button ("per leggere i contenuti") */}
-                      <button
-                        onClick={() => handleSpeakMessage(msg.id, msg.text)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition active:scale-95 cursor-pointer ${
-                          isPlayingThis
-                            ? 'bg-amber-400 text-slate-950 font-bold animate-pulse shadow-md shadow-amber-400/20'
-                            : 'bg-[#1d1138] border border-[#2a244d] text-purple-200 hover:text-amber-300 hover:border-amber-400/40'
-                        }`}
-                        title="Ascolta la lettura vocale in italiano"
-                      >
-                        {isPlayingThis ? (
-                          <>
-                            <VolumeX className="w-3.5 h-3.5 text-slate-950" />
-                            <span>Interrompi</span>
-                          </>
-                        ) : (
-                          <>
-                            <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Leggi Vocale</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <button
+                      onClick={() => handleSpeakMessage(msg.id, msg.text)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-medium transition active:scale-95 cursor-pointer ${
+                        isPlayingThis
+                          ? 'bg-amber-400 text-slate-950 font-bold animate-pulse'
+                          : 'bg-[#1d1645] border border-purple-500/30 text-purple-200 hover:text-amber-300'
+                      }`}
+                    >
+                      {isPlayingThis ? (
+                        <>
+                          <VolumeX className="w-3 h-3 text-slate-950" />
+                          <span>Interrompi</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3 h-3 text-amber-400" />
+                          <span>Leggi Vocale</span>
+                        </>
+                      )}
+                    </button>
 
-                    {/* Copy Button */}
                     <button
                       onClick={() => handleCopyMessage(msg.id, msg.text)}
-                      className="p-1.5 rounded-lg text-purple-300 hover:text-white hover:bg-purple-900/40 transition active:scale-95 cursor-pointer"
+                      className="p-1 rounded-lg text-purple-300 hover:text-white hover:bg-purple-900/40 transition active:scale-95 cursor-pointer"
                       title="Copia testo"
                     >
                       {copiedMsgId === msg.id ? (
@@ -687,7 +718,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
               {/* User Avatar */}
               {isUser && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border border-amber-300 flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-950 shadow-md mt-1 font-cinzel">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border border-amber-300 flex-shrink-0 flex items-center justify-center text-[10px] sm:text-xs font-bold text-slate-950 shadow-md mt-1 font-cinzel">
                   MT
                 </div>
               )}
@@ -697,13 +728,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
         {/* Loading Indicator */}
         {isLoading && (
-          <div className="flex gap-3 justify-start animate-in fade-in">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 border border-amber-400/50 flex items-center justify-center text-sm shadow-md text-amber-300">
+          <div className="flex gap-2 justify-start animate-in fade-in">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-800 to-indigo-900 border border-amber-400/50 flex items-center justify-center text-xs text-amber-300">
               🔮
             </div>
-            <div className="bg-[#131127] border border-[#2a244d] rounded-2xl rounded-tl-sm p-4 text-xs text-purple-200 flex items-center gap-3">
+            <div className="bg-[#14102c] border border-[#2a244d] rounded-2xl rounded-tl-sm p-3 text-xs text-purple-200 flex items-center gap-2.5">
               <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-              <span>Consultazione dell'Oracolo & elaborazione celestiale...</span>
+              <span>Consultazione dell'Oracolo & ricerca nei Grimori...</span>
             </div>
           </div>
         )}
@@ -711,18 +742,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Suggested Questions Pill Bar (when few messages) */}
+      {/* Quick Suggested Questions Pill Bar */}
       {messages.length <= 4 && !isLoading && (
-        <div className="flex-shrink-0 space-y-1.5">
-          <span className="text-[10px] uppercase font-cinzel tracking-wider text-purple-300/80 px-1">
-            Domande Rapide per l'Oracolo:
-          </span>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+        <div className="flex-shrink-0 space-y-1">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10px] sm:text-[11px]">
             {SUGGESTED_QUESTIONS.map((q, i) => (
               <button
                 key={i}
                 onClick={() => handleSendMessage(q.text)}
-                className="whitespace-nowrap px-3 py-1.5 rounded-xl bg-[#131127] hover:bg-purple-900/40 border border-[#2a244d] hover:border-amber-400/40 text-purple-200 hover:text-amber-300 transition-all flex-shrink-0 text-xs active:scale-95 cursor-pointer"
+                className="whitespace-nowrap px-2.5 py-1 rounded-xl bg-[#14102c] hover:bg-purple-900/40 border border-[#2a244d] hover:border-amber-400/40 text-purple-200 hover:text-amber-300 transition-all flex-shrink-0 active:scale-95 cursor-pointer"
               >
                 {q.text}
               </button>
@@ -731,35 +759,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* Voice Transcript Floating Banner when Recording or Recorded */}
+      {/* Voice Transcript Floating Banner when Recording */}
       {(isRecording || speechTranscript) && (
-        <div className="bg-[#1d1138] border-2 border-amber-400/80 p-3 sm:p-4 rounded-2xl shadow-2xl space-y-2.5 animate-in slide-in-from-bottom duration-200 flex-shrink-0">
-          <div className="flex items-center justify-between border-b border-[#2a244d] pb-2">
+        <div className="bg-[#1b153f] border-2 border-amber-400/80 p-3 rounded-2xl shadow-2xl space-y-2 animate-in slide-in-from-bottom duration-200 flex-shrink-0">
+          <div className="flex items-center justify-between border-b border-purple-500/20 pb-1.5">
             <div className="flex items-center gap-2 text-amber-300 text-xs font-semibold">
-              <span className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
-              <Mic className="w-4 h-4 text-amber-400" />
+              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping" />
+              <Mic className="w-3.5 h-3.5 text-amber-400" />
               <span>{isRecording ? 'Microfono attivo... Parla liberamente' : 'Trascrizione Vocale Pronta'}</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (isRecording && recognitionRef.current) {
-                    try {
-                      recognitionRef.current.stop();
-                    } catch (e) {}
-                  }
-                  setIsRecording(false);
-                  setSpeechTranscript('');
-                }}
-                className="text-[11px] text-purple-300 hover:text-rose-300 transition cursor-pointer"
-              >
-                Annulla
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                if (isRecording && recognitionRef.current) {
+                  try {
+                    recognitionRef.current.stop();
+                  } catch (e) {}
+                }
+                setIsRecording(false);
+                setSpeechTranscript('');
+              }}
+              className="text-[11px] text-purple-300 hover:text-rose-300 transition cursor-pointer"
+            >
+              Annulla
+            </button>
           </div>
 
-          <p className="text-xs text-white bg-[#131127] p-2.5 rounded-xl border border-purple-500/30 italic">
+          <p className="text-xs text-white bg-[#100d24] p-2 rounded-xl border border-purple-500/30 italic">
             "{speechTranscript || 'In ascolto delle tue parole...'}"
           </p>
 
@@ -767,16 +793,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <button
               onClick={() => handleApplyVoiceTranscript(false)}
               disabled={!speechTranscript.trim()}
-              className="px-3 py-1.5 bg-[#131127] border border-[#2a244d] text-purple-200 hover:text-white rounded-xl disabled:opacity-50 text-xs transition cursor-pointer"
+              className="px-2.5 py-1 bg-[#100d24] border border-[#2a244d] text-purple-200 hover:text-white rounded-xl disabled:opacity-50 text-[11px] transition cursor-pointer"
             >
-              Modifica nel campo
+              Modifica
             </button>
             <button
               onClick={() => handleApplyVoiceTranscript(true)}
               disabled={!speechTranscript.trim()}
-              className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-50 text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-50 text-xs transition shadow flex items-center gap-1.5 cursor-pointer"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3 h-3" />
               <span>Invia all'Oracolo</span>
             </button>
           </div>
@@ -784,69 +810,124 @@ export const ChatView: React.FC<ChatViewProps> = ({
       )}
 
       {/* Message Input & Action Bar */}
-      <div className="bg-[#131127] border border-[#2a244d] p-2 sm:p-3 rounded-2xl shadow-xl flex-shrink-0 space-y-2">
+      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] p-2 sm:p-2.5 rounded-2xl shadow-xl flex-shrink-0 space-y-1.5">
+        {/* Active Grimoires Quick Pills Bar */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto text-[10px] pb-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 flex-nowrap">
+            <span className="text-purple-400/80 font-semibold flex items-center gap-1 flex-shrink-0">
+              <BookOpen className="w-3 h-3 text-amber-400" /> Fonti:
+            </span>
+            {books.slice(0, 3).map((b) => (
+              <button
+                key={b.id}
+                onClick={() => {
+                  const updated = toggleGrimoireEnabled(b.id, !b.isEnabled);
+                  setBooks(updated);
+                  onShowToast(!b.isEnabled ? `📖 "${b.title}" attivato` : `"${b.title}" disattivato`);
+                }}
+                className={`px-2 py-0.5 rounded-md border flex items-center gap-1 whitespace-nowrap transition cursor-pointer ${
+                  b.isEnabled
+                    ? 'bg-amber-400/15 border-amber-400/40 text-amber-300 font-medium'
+                    : 'bg-purple-950/40 border-purple-500/20 text-purple-400 line-through opacity-60'
+                }`}
+                title={b.isEnabled ? 'Clicca per disattivare questo testo' : 'Clicca per includere nelle risposte'}
+              >
+                <span>{b.coverEmoji}</span>
+                <span className="truncate max-w-[110px]">{b.title.split('&')[0]}</span>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsGrimoireModalOpen(true)}
+            className="text-amber-400 hover:underline flex-shrink-0 font-medium flex items-center gap-0.5 cursor-pointer ml-auto"
+          >
+            <span>+ Gestisci Manuali</span>
+          </button>
+        </div>
+
+        {/* Input form */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSendMessage();
           }}
-          className="flex items-end gap-2"
+          className="flex items-end gap-1.5 sm:gap-2"
         >
           {/* Voice Mic Button */}
           <button
             type="button"
             onClick={toggleSpeechRecognition}
-            className={`p-3 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
+            className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
               isRecording
-                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/40 animate-pulse'
-                : 'bg-[#1d1138] border border-purple-500/40 text-amber-300 hover:bg-purple-900/50 hover:border-amber-400'
+                ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
+                : 'bg-[#1b153f] border border-purple-500/30 text-amber-400 hover:text-amber-300 hover:border-amber-400/40'
             }`}
-            title="Premi per parlare al microfono in italiano"
+            title={isRecording ? 'Interrompi registrazione' : 'Parla al microfono in italiano'}
           >
-            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5 text-amber-400" />}
+            {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
-          {/* Textarea Input */}
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder="Chiedi all'Oracolo o premi il microfono per parlare..."
-            className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-purple-400/60 focus:outline-none focus:border-amber-400 resize-none max-h-28"
-          />
+          {/* Text Input Area */}
+          <div className="flex-1 relative">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder="Chiedi all'Oracolo o cita un testo (es. Secondo il Testo 1...)..."
+              className="w-full bg-[#1b153f] border border-[#2a244d] focus:border-amber-400/80 rounded-xl px-3 py-2 text-xs sm:text-[13px] text-white placeholder-purple-400/50 focus:outline-none resize-none min-h-[38px] max-h-24 scrollbar-thin leading-relaxed"
+            />
+          </div>
 
           {/* Send Button */}
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}
-            className="p-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-amber-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
-            title="Invia messaggio"
+            className="p-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-40 disabled:hover:from-amber-500 transition-all duration-200 shadow-md shadow-amber-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
+            title="Invia all'Oracolo"
           >
-            <Send className="w-5 h-5" />
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+            ) : (
+              <Send className="w-4 h-4 text-slate-950" />
+            )}
           </button>
         </form>
       </div>
 
-      {/* Groq Settings & API Key Modal */}
+      {/* Grimoire Modal */}
+      <GrimoireModal
+        isOpen={isGrimoireModalOpen}
+        onClose={() => setIsGrimoireModalOpen(false)}
+        books={books}
+        onUpdateBooks={(updated) => setBooks(updated)}
+        onShowToast={onShowToast}
+      />
+
+      {/* Groq Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-[#131127] border border-amber-400/60 w-full max-w-lg rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#120f26] border border-[#2a244d] w-full max-w-lg rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[#2a244d] pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
-                  <Settings className="w-4 h-4" />
+                <div className="p-2 rounded-xl bg-purple-900/50 border border-purple-500/40 text-amber-400">
+                  <Key className="w-4 h-4" />
                 </div>
-                <h2 className="font-cinzel font-bold text-base text-white">
-                  Impostazioni Oracolo Groq AI
-                </h2>
+                <div>
+                  <h3 className="font-cinzel font-bold text-sm text-white gold-gradient-text">
+                    Configurazione Oracolo & Motore Groq AI
+                  </h3>
+                  <p className="text-[11px] text-purple-300/80">Llama 3.3 70B & Integrazione Santuario</p>
+                </div>
               </div>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -857,26 +938,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
 
             {/* Current Key Status */}
-            <div className="bg-[#1d1138] p-3.5 rounded-2xl border border-purple-500/30 space-y-2 text-xs">
+            <div className="bg-[#1b153f] p-3 rounded-2xl border border-purple-500/30 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-purple-300 font-medium">Stato Rilevamento Chiave:</span>
-                {keyDetails.source === 'vercel_vite' && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    Vercel (VITE_GROQ_API_KEY)
-                  </span>
-                )}
-                {keyDetails.source === 'vercel_groq' && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    Vercel (GROQ_API_KEY)
+                {keyDetails.source.startsWith('vercel') && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 text-[10px]">
+                    Vercel ({keyDetails.source})
                   </span>
                 )}
                 {keyDetails.source === 'local' && (
-                  <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/30">
+                  <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/30 text-[10px]">
                     Browser Locale
                   </span>
                 )}
                 {keyDetails.source === 'none' && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30 text-[10px]">
                     Non configurata
                   </span>
                 )}
@@ -890,11 +966,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
 
             {/* Groq API Key Input */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <label className="text-purple-200 font-semibold flex items-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-amber-400" />
-                  Inserisci / Modifica Chiave API Groq
+                  Chiave API Groq
                 </label>
                 <a
                   href="https://console.groq.com/keys"
@@ -902,7 +978,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   rel="noopener noreferrer"
                   className="text-amber-400 hover:underline text-[11px] flex items-center gap-1"
                 >
-                  <span>Ottieni gratis su Groq</span>
+                  <span>Ottieni su Groq</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -916,36 +992,30 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   setKeyTestFeedback('');
                 }}
                 placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-purple-400/50 focus:outline-none focus:border-amber-400 font-mono"
+                className="w-full bg-[#1b153f] border border-[#2a244d] rounded-xl px-3 py-2 text-xs text-white placeholder-purple-400/50 focus:outline-none focus:border-amber-400 font-mono"
               />
-
-              <p className="text-[11px] text-purple-300/80 leading-relaxed">
-                Su <strong>Vercel</strong> sono supportate sia <code>VITE_GROQ_API_KEY</code> sia <code>GROQ_API_KEY</code>. Puoi anche incollarla direttamente qui sopra per salvarla nel browser.
-              </p>
             </div>
 
             {/* Test Connection Button */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleTestApiKey}
-                  disabled={keyTestStatus === 'testing'}
-                  className="px-3.5 py-2 rounded-xl bg-[#1d1138] hover:bg-purple-900/40 border border-purple-500/40 text-amber-300 text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                >
-                  {keyTestStatus === 'testing' ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Verifica in corso...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Testa Connessione Groq Ora</span>
-                    </>
-                  )}
-                </button>
-              </div>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={handleTestApiKey}
+                disabled={keyTestStatus === 'testing'}
+                className="px-3.5 py-1.5 rounded-xl bg-[#1b153f] hover:bg-purple-900/40 border border-purple-500/40 text-amber-300 text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                {keyTestStatus === 'testing' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifica in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Testa Connessione Groq</span>
+                  </>
+                )}
+              </button>
 
               {keyTestFeedback && (
                 <p className={`text-xs font-medium ${keyTestStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -955,14 +1025,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
 
             {/* Model Selection */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-purple-200 font-semibold text-xs block">
                 Modello Linguistico Groq
               </label>
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                className="w-full bg-[#1b153f] border border-[#2a244d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
               >
                 {GROQ_MODELS.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -973,52 +1043,41 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
 
             {/* Audio Auto-read Toggle */}
-            <div className="pt-2 border-t border-[#2a244d] space-y-3">
-              <label className="flex items-center gap-2.5 text-xs text-purple-200 cursor-pointer">
+            <div className="pt-2 border-t border-[#2a244d] space-y-2">
+              <label className="flex items-center gap-2 text-xs text-purple-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={autoReadResponse}
                   onChange={(e) => setAutoReadResponse(e.target.checked)}
-                  className="rounded border-[#2a244d] text-amber-400 focus:ring-amber-400 bg-[#1d1138] w-4 h-4"
+                  className="rounded border-[#2a244d] text-amber-400 focus:ring-amber-400 bg-[#1b153f] w-4 h-4"
                 />
                 <span>Leggi automaticamente le risposte ad alta voce (Sintesi Vocale)</span>
               </label>
 
-              <label className="flex items-center gap-2.5 text-xs text-purple-200 cursor-pointer">
+              <label className="flex items-center gap-2 text-xs text-purple-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={includeSanctuaryContext}
                   onChange={(e) => setIncludeSanctuaryContext(e.target.checked)}
-                  className="rounded border-[#2a244d] text-amber-400 focus:ring-amber-400 bg-[#1d1138] w-4 h-4"
+                  className="rounded border-[#2a244d] text-amber-400 focus:ring-amber-400 bg-[#1b153f] w-4 h-4"
                 />
-                <span>Includi dati del Santuario (Calendario reale, Agenda consulti, Fase Lunare, Tarocco) nel prompt</span>
+                <span>Includi dati del Santuario (Luna, Tarocco, Agenda) nel prompt</span>
               </label>
             </div>
 
-            {/* Vercel Deployment Safety Note */}
-            <div className="bg-[#1d1138] p-3 rounded-2xl border border-purple-500/20 text-[11px] text-purple-300 space-y-1">
-              <strong className="text-amber-300 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                Zero Errori 500 su Vercel:
-              </strong>
-              <p>
-                Il sistema gestisce automaticamente qualsiasi eccezione o mancata connessione e fornisce risposte oracolari istantanee anche offline.
-              </p>
-            </div>
-
             {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 bg-[#1d1138] border border-[#2a244d] text-purple-300 hover:text-white rounded-xl text-xs cursor-pointer"
+                className="px-3.5 py-1.5 bg-[#1b153f] border border-[#2a244d] text-purple-300 hover:text-white rounded-xl text-xs cursor-pointer"
               >
                 Annulla
               </button>
               <button
                 type="button"
                 onClick={handleSaveSettings}
-                className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg active:scale-95 transition cursor-pointer"
+                className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg active:scale-95 transition cursor-pointer"
               >
                 Salva Impostazioni
               </button>

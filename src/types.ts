@@ -6,6 +6,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   category?: 'tarocchi' | 'astrologia' | 'rituale' | 'sogno' | 'consulenza' | 'generale';
+  sourcesUsed?: string[];
 }
 
 export interface GroqSettings {
@@ -132,3 +133,28 @@ export interface MoonPhaseInfo {
   recommendedHerb: string;
   suggestedAction: string;
 }
+
+export type SacredBookCategory = 'tarocchi' | 'astrologia' | 'erboristeria' | 'rituali' | 'filosofia' | 'personale' | 'altro';
+
+export interface SacredBookSection {
+  id: string;
+  title: string;
+  content: string;
+  chapterNumber?: number | string;
+}
+
+export interface SacredBook {
+  id: string;
+  title: string;
+  author?: string;
+  category: SacredBookCategory;
+  description: string;
+  coverEmoji: string;
+  sections: SacredBookSection[];
+  fullText?: string;
+  tags: string[];
+  isEnabled: boolean; // if true, consulted by Oracle in Chat
+  isCustom?: boolean; // user created
+  lastUpdated?: string;
+}
+

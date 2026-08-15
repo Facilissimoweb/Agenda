@@ -508,7 +508,7 @@ export default function App() {
         </main>
 
         {/* Footer */}
-        <footer className="mt-8 py-6 border-t border-[#2a244d]/60 text-center text-xs text-purple-300/70 space-y-1.5">
+        <footer className={`mt-8 py-6 border-t border-[#2a244d]/60 text-center text-xs text-purple-300/70 space-y-1.5 ${activeTab === 'chat' ? 'hidden sm:block' : 'block'}`}>
           <p className="font-cinzel gold-gradient-text font-bold tracking-wider">
             MARIA TERESA • AGENDA & SANTUARIO PRIVATO
           </p>

@@ -1,6 +1,6 @@
 // Supabase Cloud Persistence & Authentication Service
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { Appointment, Contact, CycleData, DayMenu, JournalNote, WeeklyMenu, ChatMessage } from '../types';
+import { Appointment, Contact, CycleData, DayMenu, JournalNote, WeeklyMenu, ChatMessage, SacredBook } from '../types';
 
 export const AUTHORIZED_EMAIL = 'mariateresarogani@gmail.com';
 
@@ -185,6 +185,7 @@ export interface CloudStoreData {
   cycleData?: CycleData;
   weeklyMenu?: WeeklyMenu;
   journalNotes?: JournalNote[];
+  sacredBooks?: SacredBook[];
 }
 
 /**
@@ -298,6 +299,29 @@ export async function downloadAllCloudData(email: string = AUTHORIZED_EMAIL): Pr
         attachments: n.attachments || undefined,
         audioRecording: n.audio_recording || n.audioRecording || undefined,
       }));
+    }
+
+    // 6. Fetch Sacred Books (Grimoires / Manuals)
+    try {
+      const { data: bRows } = await client.from('sacred_books').select('*');
+      if (bRows && bRows.length > 0) {
+        result.sacredBooks = bRows.map((b: any) => ({
+          id: b.id,
+          title: b.title,
+          author: b.author || 'Tradizione Sacra',
+          category: b.category || 'personale',
+          coverEmoji: b.cover_emoji || '📖',
+          description: b.description || '',
+          tags: Array.isArray(b.tags) ? b.tags : [],
+          isEnabled: b.is_enabled !== false,
+          isCustom: !!b.is_custom,
+          sections: Array.isArray(b.sections) ? b.sections : [],
+          fullText: b.full_text || '',
+          updatedAt: b.updated_at || new Date().toISOString(),
+        }));
+      }
+    } catch (e) {
+      console.warn('Note: sacred_books table not yet initialized in Supabase');
     }
 
     return { success: true, data: result };
