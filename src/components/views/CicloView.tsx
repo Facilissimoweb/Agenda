@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CycleData, CycleEntry } from '../../types';
+import { calculateRealMoon } from '../../utils/lunarEngine';
 import { 
   Droplet, 
   Moon, 
@@ -11,7 +12,11 @@ import {
   Edit3, 
   X,
   History,
-  Activity
+  Activity,
+  Sun,
+  Leaf,
+  Coffee,
+  CheckCircle2
 } from 'lucide-react';
 
 interface CicloViewProps {
@@ -25,6 +30,7 @@ export const CicloView: React.FC<CicloViewProps> = ({
   onUpdateCycleData,
   onShowToast,
 }) => {
+  const realMoon = calculateRealMoon(new Date());
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [startDateInput, setStartDateInput] = useState(cycleData.startDate);
   const [avgLengthInput, setAvgLengthInput] = useState(cycleData.avgLength || 28);
@@ -201,6 +207,48 @@ export const CicloView: React.FC<CicloViewProps> = ({
         <p className="text-xs text-purple-100/90 leading-relaxed italic">
           "{phaseAdvice}"
         </p>
+      </div>
+
+      {/* Biological & Real Astronomical Moon Synchronicity Card */}
+      <div className="bg-gradient-to-br from-[#1b1435] to-[#100b24] border border-amber-400/30 p-4 sm:p-5 rounded-2xl space-y-3 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2a244d]/70 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Moon className="w-4 h-4 text-amber-300" />
+            <h3 className="font-cinzel text-xs sm:text-sm font-bold text-amber-300">
+              Sintonia Sacra col Cielo Reale: {realMoon.icon} {realMoon.phaseName} in {realMoon.zodiacSign}
+            </h3>
+          </div>
+          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-950 border border-purple-700/50 text-purple-200">
+            {realMoon.illumination}% Luce • {realMoon.element} {realMoon.elementIcon}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1.5 bg-[#120d26]/80 p-3 rounded-xl border border-[#2a244d]">
+            <span className="text-amber-300 font-semibold text-[11px] flex items-center gap-1.5">
+              <Sun className="w-3.5 h-3.5 text-amber-400" /> Risoluzione Energetica Ciclo-Luna:
+            </span>
+            <p className="text-purple-200 text-[11px] leading-relaxed">
+              Il tuo corpo si trova al <strong>Giorno {currentCycleDay} ({archetypeTitle})</strong> mentre la volta celeste irradia l'energia della <strong>{realMoon.phaseName}</strong>.
+            </p>
+            <p className="text-[10px] text-purple-300 italic pt-1 border-t border-[#2a244d]/50">
+              💡 {realMoon.advice}
+            </p>
+          </div>
+
+          <div className="space-y-1.5 bg-[#120d26]/80 p-3 rounded-xl border border-[#2a244d]">
+            <span className="text-emerald-300 font-semibold text-[11px] flex items-center gap-1.5">
+              <Leaf className="w-3.5 h-3.5 text-emerald-400" /> Nutrizione & Tisana Biologica Odierna:
+            </span>
+            <p className="text-purple-200 text-[11px]">
+              Giorno del <strong>{realMoon.biodynamicPlantPart}</strong>: integra <em>{realMoon.nutritionImpact.sacredSpice}</em> e cibi nutrienti.
+            </p>
+            <div className="text-[10px] text-amber-200/90 pt-1 border-t border-[#2a244d]/50 flex items-center gap-1.5">
+              <Coffee className="w-3 h-3 text-amber-400" />
+              <span>Tisana consigliata: <strong>{realMoon.nutritionImpact.alchemicalTea.name}</strong></span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Symptom & Energy Logger Form */}

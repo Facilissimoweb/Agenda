@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Appointment, CycleData, TabId, TarotCard } from '../../types';
-import { TAROT_DECK, getCurrentMoonInfo } from '../../data/initialData';
+import { TAROT_DECK } from '../../data/initialData';
+import { calculateRealMoon, getUpcomingMoonPhases, RealMoonDetails } from '../../utils/lunarEngine';
 import { 
   Calendar, 
   Droplet, 
@@ -14,7 +15,14 @@ import {
   Leaf, 
   Flame, 
   MessageCircle,
-  Wand2
+  Wand2,
+  Heart,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  CheckCircle2,
+  AlertCircle,
+  Coffee
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -33,7 +41,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenNewAppointment,
   onShowToast,
 }) => {
-  const moonInfo = getCurrentMoonInfo();
+  const realMoon = calculateRealMoon(new Date());
+  const upcomingPhases = getUpcomingMoonPhases(new Date(), 4);
+  const [showNutritionDetails, setShowNutritionDetails] = useState<boolean>(false);
   
   // Calculate Cycle Day
   const startDate = new Date(cycleData.startDate);
@@ -183,53 +193,149 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </button>
       </div>
 
-      {/* Main 2-Column Grid: Moon Phase & Interactive Tarot Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Moon Phase & Astrological Card */}
+      {/* Main 2-Column Grid: Real Astronomical Moon Phase & Interactive Tarot Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Real Astronomical Moon Phase & Biodynamic Nutrition Card */}
         <div className="bg-[#131127] border border-[#2a244d] p-5 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/5 rounded-full blur-2xl pointer-events-none" />
           
-          <div>
-            <div className="flex items-center justify-between border-b border-[#2a244d]/70 pb-2.5 mb-3">
+          <div className="space-y-3">
+            {/* Header with Real Illumination & Date */}
+            <div className="flex items-center justify-between border-b border-[#2a244d]/70 pb-2.5">
               <span className="text-[11px] uppercase tracking-widest text-amber-400 font-semibold font-cinzel flex items-center gap-1.5">
-                <Moon className="w-3.5 h-3.5" /> Fase Lunare Odierna
+                <Moon className="w-3.5 h-3.5 text-amber-300" /> Lunazione Astronomica Reale
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 border border-purple-700/50 text-purple-200">
-                {moonInfo.illumination}% Luce
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-950 border border-purple-700/60 text-purple-200 font-medium">
+                {realMoon.illumination}% Luce • Età {realMoon.ageDays}d
               </span>
             </div>
 
-            <div className="flex items-center gap-4 my-2">
-              <div className="text-4xl text-amber-200 animate-pulse select-none">
-                {moonInfo.icon}
+            {/* Moon Phase & Zodiac Sign */}
+            <div className="flex items-start gap-3.5 my-1">
+              <div className="text-4xl text-amber-200 filter drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] select-none pt-0.5">
+                {realMoon.icon}
               </div>
-              <div>
-                <h4 className="font-cinzel text-base font-bold text-white">
-                  {moonInfo.phaseName}
+              <div className="flex-1">
+                <h4 className="font-cinzel text-base font-bold text-white leading-snug">
+                  {realMoon.phaseName}
                 </h4>
-                <p className="text-xs text-purple-300 font-light">
-                  {moonInfo.sign}
-                </p>
+                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <span className="text-xs text-amber-300 font-medium">
+                    in {realMoon.zodiacSign} ({realMoon.zodiacDegree}°)
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-200 border border-purple-500/30">
+                    {realMoon.element} {realMoon.elementIcon}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <p className="text-xs text-purple-200/90 leading-relaxed mt-2.5 italic border-l-2 border-amber-400/40 pl-2.5">
-              "{moonInfo.advice}"
+            {/* Esoteric Oracle Advice */}
+            <p className="text-xs text-purple-200/90 leading-relaxed italic border-l-2 border-amber-400/50 pl-2.5 py-0.5 bg-purple-950/20 rounded-r-lg">
+              "{realMoon.advice}"
             </p>
+
+            {/* Real Biodynamic & Organ Indicators */}
+            <div className="pt-2 border-t border-[#2a244d]/60 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-purple-300">
+                <span className="flex items-center gap-1.5">
+                  <Leaf className="w-3.5 h-3.5 text-emerald-400" /> Giorno Biodinamico:
+                </span>
+                <strong className="text-emerald-300 font-semibold">{realMoon.biodynamicPlantPart}</strong>
+              </div>
+
+              <div className="flex items-center justify-between text-purple-300">
+                <span className="flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-rose-400" /> Organi Governati:
+                </span>
+                <span className="text-amber-200 text-[11px] font-medium text-right max-w-[170px] truncate" title={realMoon.governedOrgans}>
+                  {realMoon.governedOrgans}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Toggle for Real Lunar Nutrition Impact */}
+            <button
+              onClick={() => setShowNutritionDetails(!showNutritionDetails)}
+              className="w-full mt-2 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-purple-900/40 border border-amber-400/40 hover:border-amber-400 text-amber-200 hover:text-amber-100 text-xs font-semibold flex items-center justify-between transition active:scale-98 cursor-pointer shadow-xs"
+            >
+              <span className="flex items-center gap-1.5">
+                <Utensils className="w-3.5 h-3.5 text-amber-400" />
+                <span>Nutrizione Reale della Luna ({realMoon.phaseCategory})</span>
+              </span>
+              {showNutritionDetails ? (
+                <ChevronUp className="w-4 h-4 text-amber-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-amber-400" />
+              )}
+            </button>
+
+            {/* Expandable Lunar Nutrition Drawer */}
+            {showNutritionDetails && (
+              <div className="p-3 bg-[#0e0a1f] border border-amber-400/30 rounded-xl space-y-2.5 text-xs animate-fadeIn">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-semibold text-[11px] uppercase tracking-wider">
+                    <Info className="w-3.5 h-3.5 text-amber-400" /> Tema Fisiologico:
+                  </div>
+                  <p className="text-purple-200 text-[11px] leading-relaxed">
+                    {realMoon.nutritionImpact.metabolicTheme}
+                  </p>
+                  <p className="text-purple-300 text-[10px] italic">
+                    {realMoon.nutritionImpact.focusAction}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-[#2a244d]/70 space-y-1.5">
+                  <div className="text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Cibi Consigliati:
+                  </div>
+                  <ul className="space-y-0.5 text-[10px] text-purple-200 pl-4 list-disc marker:text-emerald-400">
+                    {realMoon.nutritionImpact.recommendedFoods.slice(0, 3).map((food, idx) => (
+                      <li key={idx}>{food}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="pt-2 border-t border-[#2a244d]/70 space-y-1">
+                  <div className="text-amber-300 text-[11px] font-semibold flex items-center gap-1">
+                    <Coffee className="w-3 h-3 text-amber-400" /> Tisana di Oggi:
+                  </div>
+                  <p className="text-[10px] text-purple-200">
+                    <strong>{realMoon.nutritionImpact.alchemicalTea.name}</strong> ({realMoon.nutritionImpact.alchemicalTea.herbs})
+                  </p>
+                  <p className="text-[9px] text-purple-300/80 italic">
+                    Infusione: {realMoon.nutritionImpact.alchemicalTea.brewTime}
+                  </p>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => onNavigateTab('menu')}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition"
+                  >
+                    <span>Vedi Menù Settimanale Completo</span>
+                    <ArrowRight className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-[#2a244d]/60 space-y-1.5 text-xs text-purple-300">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <Leaf className="w-3 h-3 text-emerald-400" /> Elemento attivo:
-              </span>
-              <strong className="text-amber-300 font-medium">{moonInfo.element}</strong>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <Flame className="w-3 h-3 text-amber-400" /> Erba consigliata:
-              </span>
-              <strong className="text-amber-300 font-medium">{moonInfo.recommendedHerb}</strong>
+          {/* Upcoming Real Lunations Mini Schedule */}
+          <div className="mt-3.5 pt-2.5 border-t border-[#2a244d]/60">
+            <span className="text-[10px] font-cinzel text-purple-300 font-semibold uppercase tracking-wider block mb-2">
+              Prossimi Eventi Lunari Reali
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {upcomingPhases.slice(0, 2).map((ev, idx) => (
+                <div key={idx} className="bg-[#1a1334]/80 p-2 rounded-lg border border-[#2a244d] flex items-center gap-2">
+                  <span className="text-base">{ev.icon}</span>
+                  <div className="truncate">
+                    <p className="text-[10px] font-semibold text-white truncate">{ev.phaseName.split(' ')[0]}</p>
+                    <p className="text-[9px] text-amber-300">{ev.dateFormatted} ({ev.daysRemaining}g)</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

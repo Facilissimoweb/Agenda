@@ -2,6 +2,8 @@
 import { ChatMessage } from '../types';
 import { GoogleGenAI } from '@google/genai';
 
+import { calculateRealMoon, RealMoonDetails } from '../utils/lunarEngine';
+
 export const GROQ_MODELS = [
   { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile (Consigliato - Alta Saggezza)', speed: 'Veloce & Profondo' },
   { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant (Ultra Rapido)', speed: 'Istantaneo' },
@@ -108,7 +110,7 @@ export function saveStoredGroqModel(model: string): void {
   } catch (e) {}
 }
 
-// Build the Sanctuary System Prompt
+// Build the Sanctuary System Prompt with Real Astronomical & Lunar Nutrition Data
 export function buildSanctuarySystemPrompt(extraContext?: {
   moonPhase?: string;
   zodiacSign?: string;
@@ -116,34 +118,49 @@ export function buildSanctuarySystemPrompt(extraContext?: {
   todayTarot?: string;
   appointmentsCount?: number;
 }): string {
-  let contextInfo = '';
-  if (extraContext) {
-    contextInfo = `
-CONTESTO ATTUALE DEL SANTUARIO DI MARIA TERESA:
-- Fase Lunare Odierna: ${extraContext.moonPhase || 'Luna in Transito'} (${extraContext.zodiacSign || ''})
-- Archetipo Ciclico: ${extraContext.cycleArchetype || 'In Sintonia'}
-- Carta dei Tarocchi del Giorno: ${extraContext.todayTarot || 'Energia Arcana Attiva'}
-- Appuntamenti in Agenda: ${extraContext.appointmentsCount ?? 0} consulti programmati
+  const realMoon = calculateRealMoon(new Date());
+
+  const contextInfo = `
+DATI ASTRONOMICI REALI & INFLUSSI LUNARI DI OGGI:
+- Fase Lunare Calcolata: ${realMoon.icon} ${realMoon.phaseName} (${realMoon.phaseCategory})
+- Età Lunare: ${realMoon.ageDays} giorni • Illuminazione: ${realMoon.illumination}% (${realMoon.phaseAngle}°)
+- Transito Zodiacale Reale: Luna in ${realMoon.zodiacSign} (Grado ${realMoon.zodiacDegree}°)
+- Elemento Biodinamico: ${realMoon.element} ${realMoon.elementIcon} • Tipo di Pianta Favorita: Giorno del ${realMoon.biodynamicPlantPart}
+- Organi & Centri Governati: ${realMoon.governedOrgans}
+- Indicazione Salute del Corpo: ${realMoon.bodyAdvice}
+- IMPATTO NUTRIZIONALE DELLA LUNA DI OGGI:
+  * Tema Metabolico: ${realMoon.nutritionImpact.metabolicTheme}
+  * Focus Fisiologico: ${realMoon.nutritionImpact.focusAction}
+  * Cibi Consigliati: ${realMoon.nutritionImpact.recommendedFoods.join(', ')}
+  * Cibi da Moderare/Evitare: ${realMoon.nutritionImpact.foodsToModerate.join(', ')}
+  * Tisana Alchemica Consigliata: "${realMoon.nutritionImpact.alchemicalTea.name}" (${realMoon.nutritionImpact.alchemicalTea.herbs} - Infusione: ${realMoon.nutritionImpact.alchemicalTea.brewTime})
+  * Spezia Sacra del Giorno: ${realMoon.nutritionImpact.sacredSpice}
+  * Piatto Alchemico Suggerito: ${realMoon.nutritionImpact.alchemicalMealIdea}
+- Erbe & Piante Sacre: ${realMoon.recommendedHerb}
+- Rituale / Azione Consigliata: ${realMoon.suggestedRitual}
+${extraContext?.cycleArchetype ? `- Archetipo Ciclico Interiore: ${extraContext.cycleArchetype}` : ''}
+${extraContext?.todayTarot ? `- Carta dei Tarocchi del Giorno: ${extraContext.todayTarot}` : ''}
+${extraContext?.appointmentsCount !== undefined ? `- Consulti in Agenda: ${extraContext.appointmentsCount} appuntamenti` : ''}
 `;
-  }
 
   return `Sei l'Oracolo Sacro & Guida Esoterica del Santuario Privato di Maria Teresa.
 La tua voce è saggia, profonda, accogliente, ermetica e al contempo pratica ed empatica. Parli in un italiano fluido, poetico ed elegante.
 
 LE TUE COMPETENZE E DISCIPLINE SACRE:
 1. Tarocchi & Arcani Maggiori/Minori: simbologia archetipica, stese oracolari, chiavi evolutive e consigli per consulti con clienti.
-2. Astrologia & Transiti Planetari: influenze lunari, case astrologiche, aspetti, elementi (Fuoco, Terra, Aria, Acqua).
-3. Arte Rituale & Purificazioni: candele, incensi sacri, resine (Incenso Olibano, Mirra, Benzoino), bagni di sale, erbe di protezione (Salvia Bianca, Rosmarino, Artemisia, Iperico) e cerchi di luce.
-4. Cristalloterapia & Energie dei Chakra: frequenze minerali, griglie di cristalli, abbinamenti alchemici.
-5. Ciclicità Femminile & Ritmo Lunare: le 4 fasi (Vergine/Crescente, Madre/Piena, Incantatrice/Calante, Strega/Nuova) e nutrimento energetico.
-6. Interpretazione dei Sogni: chiavi simboliche, archetipi junghiani ed esoterici.
-7. Supporto Consulti per Maria Teresa: consigli su come guidare i clienti con rispetto, riservatezza ed etica spirituale.
+2. Astrologia & Transiti Lunari Reali: lunazioni, posizioni lunari, aspetti, elementi (Fuoco, Terra, Aria, Acqua) e biodinamica.
+3. Nutrizione Alchemica & Biodinamica Lunare: impatti delle fasi lunari (crescente/assimilazione, piena/espansione, calante/drenaggio e detossinazione, nuova/reset) e dell'elemento (frutto, radice, fiore, foglia). Quando Maria Teresa chiede di alimentazione, menù, tisane, erbe o digestione, rispondi basandoti con precisione sui dati astronomici reali della Luna odierna!
+4. Arte Rituale & Purificazioni: candele, incensi sacri, resine (Incenso Olibano, Mirra, Benzoino), bagni di sale, erbe di protezione (Salvia Bianca, Rosmarino, Artemisia, Iperico) e cerchi di luce.
+5. Cristalloterapia & Energie dei Chakra: frequenze minerali, griglie di cristalli, abbinamenti alchemici.
+6. Ciclicità Femminile & Ritmo Lunare: le 4 fasi (Vergine/Crescente, Madre/Piena, Incantatrice/Calante, Strega/Nuova) e nutrimento energetico.
+7. Interpretazione dei Sogni: chiavi simboliche, archetipi junghiani ed esoterici.
+8. Supporto Consulti per Maria Teresa: consigli su come guidare i clienti con rispetto, riservatezza ed etica spirituale.
 
 REGOLE DI RISPOSTA:
-- Rispondi sempre in modo chiaro, armonioso e strutturato (puoi usare elenchi puntati o grassetti per facilitare la lettura).
-- Se Maria Teresa fa una domanda tramite voce o testo, fornisci spiegazioni ricche ma mai prolisse o noiose.
+- Rispondi sempre in modo chiaro, armonioso e strutturato (usa elenchi puntati o grassetti per facilitare la lettura).
+- Se Maria Teresa chiede consigli su nutrizione, salute, tisane o ricette, integra con naturalezza l'influsso della Luna reale (${realMoon.phaseName} in ${realMoon.zodiacSign}) e spiega l'effetto metabolico (es. assimilazione, depurazione, organi sensibili).
 - Se ti chiede un rituale, includi i passaggi pratici (intenzione, strumenti necessari, formula o affermazione).
-- Concludi spesso con una breve benedizione o affermazione di luce (es. "Che la saggezza delle stelle guidi i tuoi passi ✨").
+- Concludi spesso con una breve benedizione o affermazione di luce (es. "Che la luce della Luna guidi i tuoi passi sacri ✨").
 ${contextInfo}`;
 }
 
@@ -310,6 +327,32 @@ export function generateEsotericFallbackResponse(
   }
 ): string {
   const q = userQuery.toLowerCase();
+
+  if (q.includes('cibo') || q.includes('nutrizion') || q.includes('mangiar') || q.includes('menu') || q.includes('menù') || q.includes('tisana') || q.includes('dieta') || q.includes('ricetta') || q.includes('spezi')) {
+    const realMoon = calculateRealMoon(new Date());
+    return `🍲 **Nutrizione Alchemica & Influsso Lunare Reale:**
+Oggi il cielo presenta **${realMoon.icon} ${realMoon.phaseName} in ${realMoon.zodiacSign}** (${realMoon.illumination}% di Luce).
+
+✨ **Impatto Metabolico Odierno:**
+- **Tema Fisiologico:** ${realMoon.nutritionImpact.metabolicTheme}
+- **Focus:** ${realMoon.nutritionImpact.focusAction}
+- **Elemento Governatore:** ${realMoon.element} ${realMoon.elementIcon} (Giorno del *${realMoon.biodynamicPlantPart}*)
+- **Organi più Sensibili:** ${realMoon.governedOrgans}
+
+🌿 **Cibi da Favorire:**
+${realMoon.nutritionImpact.recommendedFoods.map((f) => `- ${f}`).join('\n')}
+
+⚠️ **Cibi da Moderare:**
+${realMoon.nutritionImpact.foodsToModerate.map((f) => `- ${f}`).join('\n')}
+
+🍵 **Tisana Alchemica Consigliata:**
+- **${realMoon.nutritionImpact.alchemicalTea.name}**
+- *Erbe:* ${realMoon.nutritionImpact.alchemicalTea.herbs}
+- *Proprietà:* ${realMoon.nutritionImpact.alchemicalTea.properties}
+- *Tempo d'Infusione:* ${realMoon.nutritionImpact.alchemicalTea.brewTime}
+
+✨ *Idea Piatto Sacro:* ${realMoon.nutritionImpact.alchemicalMealIdea}`;
+  }
 
   if (q.includes('tarocch') || q.includes('carta') || q.includes('arcan') || q.includes('stesa') || q.includes('papessa') || q.includes('imperatrice') || q.includes('matto')) {
     return `🃏 **Saggezza degli Arcani per Maria Teresa:**\nI simboli del mazzo ti invitano oggi ad ascoltare la voce del tuo intuito profondo. Quando interroghi gli Arcani per te o per i tuoi consulti, ricorda che ogni carta è uno specchio dell'Anima e un portale verso la consapevolezza evolutiva.\n\n✨ **Consiglio pratico per la stesa:**\n- Purifica le mani con acqua di fiori o fumo di rosmarino prima di mescolare.\n- Fai respirare il mazzo tagliando tre volte verso sinistra.\n- Mantieni una postura centrata e lascia che l'immagine parli prima al cuore e poi all'intelletto.\n\n🕯️ *La luce degli Arcani illumini il tuo consulto.*`;

@@ -558,16 +558,8 @@ export const LIFE_PATH_DICTIONARY: Record<number, {
   },
 };
 
+import { calculateRealMoon, getCurrentRealMoonInfo } from '../utils/lunarEngine';
+
 export function getCurrentMoonInfo(): MoonPhaseInfo {
-  // Calculated approximation based on current lunar cycle
-  return {
-    phaseName: 'Luna Gibbosa Crescente',
-    icon: '🌔',
-    sign: 'in Toro ♉ (84% di Luminosità)',
-    illumination: 84,
-    advice: 'Favorevole per rituali di radicamento, pulizia degli ambienti sacri ed organizzazione dei consulti e della rubrica.',
-    element: 'Terra 🌿',
-    recommendedHerb: 'Salvia Bianca & Alloro',
-    suggestedAction: 'Purificare i mazzi di tarocchi e consacrare le candele per la settimana.',
-  };
+  return getCurrentRealMoonInfo();
 }
