@@ -73,6 +73,20 @@ export type WeeklyMenu = Record<string, DayMenu>;
 
 export type JournalCategory = 'Tarocchi' | 'Astrologia' | 'Rituali' | 'Sogni' | 'Personale';
 
+export interface JournalAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'pdf';
+  dataUrl: string;
+  size?: string;
+}
+
+export interface JournalAudioRecording {
+  dataUrl: string;
+  duration?: number;
+  dateAdded?: string;
+}
+
 export interface JournalNote {
   id: string | number;
   title: string;
@@ -81,6 +95,8 @@ export interface JournalNote {
   icon: string;
   content: string;
   pinned?: boolean;
+  attachments?: JournalAttachment[];
+  audioRecording?: JournalAudioRecording;
 }
 
 export interface TarotCard {

@@ -169,7 +169,28 @@ export const INITIAL_JOURNAL_NOTES: JournalNote[] = [
     date: '14 Agosto 2026',
     icon: '♌',
     pinned: true,
-    content: 'Durante il rituale serale con candele dorate e quarzo citrino, è emersa limpida la necessità di onorare la propria regalità spirituale. Il Leone ci spinge a non nascondere i nostri talenti e ad accogliere i consultanti con cuore aperto e fermezza d\'intento.',
+    content: 'Durante il rituale serale con candele dorate e quarzo citrino, è emersa limpida la necessità di onorare la propria regalità spirituale. Il Leone ci spinge a non nascondere i nostri talenti e ad accogliere i consultanti con cuore aperto e fermezza d\'intento.\n\nHo preparato l\'altare con petali di girasole, incenso di mirra e la stesa di tarocchi con la carta del Sole e dell\'Imperatore.',
+    attachments: [
+      {
+        id: 'att-1',
+        name: 'Referto_Astrologico_Leone_2026.pdf',
+        type: 'pdf',
+        dataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQovQ29udGVudHMgNCAwIFIKL1Jlc291cmNlcyA8PAovRm9udCA8PAovRjEgNSAwIFIKPj4KPj4KPj4KZW5kb2JqCjQgMCBvYmoKPDwKL0xlbmd0aCA4NQo+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjEwMCA3MDAgVGROCihTYW50dWFyaW8gZGkgTWFyaWEgVGVyZXNhIC0gU2NoZWRhIEFzdHJvbG9naWNhKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwKL1R5cGUgL1ZvbnQKL1N1YnR5cGUgL1R5cGUxCi9CYXNlRm9udCAvaGVsdmV0aWNhCj4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTggMDAwMDAgbiAKMDAwMDAwMDA3NyAwMDAwMCBuIAowMDAwMDAwMTM0IDAwMDAwIG4gCjAwMDAwMDAyNzggMDAwMDAgbiAKMDAwMDAwMDQxNiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDYKL1Jvb3QgMSAwIFIKPj4Kc3RhcnR4cmVmCjUxOQolJUVPRgo=',
+        size: '142 KB',
+      },
+      {
+        id: 'att-2',
+        name: 'Stesa_Tarocchi_Altare.jpg',
+        type: 'image',
+        dataUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+        size: '620 KB',
+      },
+    ],
+    audioRecording: {
+      dataUrl: 'https://actions.google.com/sounds/v1/ambiences/outdoor_meadow_wind.ogg',
+      duration: 18,
+      dateAdded: '21:30',
+    },
   },
   {
     id: 'note-2',
@@ -179,6 +200,15 @@ export const INITIAL_JOURNAL_NOTES: JournalNote[] = [
     icon: '🔮',
     pinned: false,
     content: 'Stamattina il binomio estratto è stato straordinario: La Papessa (custode del mistero interiore) seguita dal Bagatto (il creatore che trasforma la materia). Mi ricorda che ogni consulto deve prima germogliare nel silenzio dell\'ascolto prima di diventare parola guidante.',
+    attachments: [
+      {
+        id: 'att-3',
+        name: 'La_Papessa_e_Il_Bagatto_Sintesi.pdf',
+        type: 'pdf',
+        dataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQovQ29udGVudHMgNCAwIFIKL1Jlc291cmNlcyA8PAovRm9udCA8PAovRjEgNSAwIFIKPj4KPj4KPj4KZW5kb2JqCjQgMCBvYmoKPDwKL0xlbmd0aCA4NQo+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjEwMCA3MDAgVGROCihTYW50dWFyaW8gZGkgTWFyaWEgVGVyZXNhIC0gU2NoZWRhIEFzdHJvbG9naWNhKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwKL1R5cGUgL1ZvbnQKL1N1YnR5cGUgL1R5cGUxCi9CYXNlRm9udCAvaGVsdmV0aWNhCj4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTggMDAwMDAgbiAKMDAwMDAwMDA3NyAwMDAwMCBuIAowMDAwMDAwMTM0IDAwMDAwIG4gCjAwMDAwMDAyNzggMDAwMDAgbiAKMDAwMDAwMDQxNiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDYKL1Jvb3QgMSAwIFIKPj4Kc3RhcnR4cmVmCjUxOQolJUVPRgo=',
+        size: '98 KB',
+      },
+    ],
   },
   {
     id: 'note-3',
@@ -188,6 +218,15 @@ export const INITIAL_JOURNAL_NOTES: JournalNote[] = [
     icon: '🕯️',
     pinned: false,
     content: 'Ho rinnovato l\'acqua di luna piena, cosparso gocce di essenza di rosa damascena e disposto 4 punte di quarzo ialino ai punti cardinali del mio studio. L\'ambiente ora risuona di una frequenza di pace cristallina.',
+    attachments: [
+      {
+        id: 'att-4',
+        name: 'Altare_Acqua_Cristalli.jpg',
+        type: 'image',
+        dataUrl: 'https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=800&q=80',
+        size: '512 KB',
+      },
+    ],
   },
   {
     id: 'note-4',

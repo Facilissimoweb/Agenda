@@ -45,6 +45,8 @@ interface ChatViewProps {
   appointments: Appointment[];
   cycleData: CycleData;
   onShowToast: (msg: string) => void;
+  pendingPrompt?: string | null;
+  onClearPendingPrompt?: () => void;
 }
 
 const INITIAL_GREETING: ChatMessage = {
@@ -64,7 +66,13 @@ const SUGGESTED_QUESTIONS = [
   { text: '🌿 Erbe e cristalli per il Chakra del Cuore', category: 'rituale' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onShowToast }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ 
+  appointments, 
+  cycleData, 
+  onShowToast,
+  pendingPrompt,
+  onClearPendingPrompt
+}) => {
   // Chat messages state with persistence
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
@@ -101,6 +109,22 @@ export const ChatView: React.FC<ChatViewProps> = ({ appointments, cycleData, onS
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Handle incoming pending prompt from Journal
+  useEffect(() => {
+    if (pendingPrompt && pendingPrompt.trim()) {
+      setInputMessage(pendingPrompt);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 150);
+      if (onClearPendingPrompt) {
+        onClearPendingPrompt();
+      }
+    }
+  }, [pendingPrompt, onClearPendingPrompt]);
 
   // Refresh key details on mount or changes
   const refreshKeyDetails = () => {

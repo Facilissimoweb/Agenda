@@ -295,6 +295,8 @@ export async function downloadAllCloudData(email: string = AUTHORIZED_EMAIL): Pr
         icon: n.icon,
         content: n.content,
         pinned: !!n.pinned,
+        attachments: n.attachments || undefined,
+        audioRecording: n.audio_recording || n.audioRecording || undefined,
       }));
     }
 
@@ -440,6 +442,8 @@ export async function uploadJournalNotesToCloud(notes: JournalNote[]): Promise<b
         icon: n.icon,
         content: n.content,
         pinned: n.pinned || false,
+        attachments: n.attachments || null,
+        audio_recording: n.audioRecording || null,
         owner_email: AUTHORIZED_EMAIL,
       }));
       await client.from('journal_notes').upsert(rows);

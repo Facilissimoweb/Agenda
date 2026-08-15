@@ -95,11 +95,25 @@ export default function App() {
   const [journalNotes, setJournalNotes] = useState<JournalNote[]>(() => {
     try {
       const saved = localStorage.getItem('mt_notes');
-      return saved ? JSON.parse(saved) : INITIAL_JOURNAL_NOTES;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // If parsed is array and has elements
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If the user's saved notes don't have attachments on note-1, merge demo attachments
+          const hasAnyAttachments = parsed.some((n: JournalNote) => n.attachments && n.attachments.length > 0);
+          if (!hasAnyAttachments) {
+            return INITIAL_JOURNAL_NOTES;
+          }
+          return parsed;
+        }
+      }
+      return INITIAL_JOURNAL_NOTES;
     } catch {
       return INITIAL_JOURNAL_NOTES;
     }
   });
+
+  const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
 
   const [toast, setToast] = useState<ToastState>({
     show: false,
@@ -353,6 +367,14 @@ export default function App() {
     setJournalNotes((prev) => prev.filter((n) => n.id !== id));
   };
 
+  // Send Journal Note to Oracle Chat
+  const handleSendJournalNoteToChat = (note: JournalNote) => {
+    const prompt = `[Riflessione dal mio Diario - "${note.title}" (${note.category})]\n${note.content}\n\nCara Guida Oracolare, cosa mi suggerisci e quali chiavi simboliche o rituali mi consigli su questa mia riflessione? ✨`;
+    setPendingChatPrompt(prompt);
+    setActiveTab('chat');
+    showToast('🔮 Nota del diario trasferita alla Chat dell\'Oracolo!');
+  };
+
   // Sanctuary Lock & Unlock Handlers
   const handleUnlock = () => {
     setIsUnlocked(true);
@@ -460,6 +482,7 @@ export default function App() {
                   onAddNote={handleAddNote}
                   onUpdateNote={handleUpdateNote}
                   onDeleteNote={handleDeleteNote}
+                  onSendToChat={handleSendJournalNoteToChat}
                   onShowToast={showToast}
                 />
               )}
@@ -472,6 +495,8 @@ export default function App() {
                 <ChatView
                   appointments={appointments}
                   cycleData={cycleData}
+                  pendingPrompt={pendingChatPrompt}
+                  onClearPendingPrompt={() => setPendingChatPrompt(null)}
                   onShowToast={showToast}
                 />
               )}
