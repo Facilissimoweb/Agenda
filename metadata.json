@@ -1,0 +1,7 @@
+{
+  "name": "Diario Privato & Agenda Esoterica",
+  "description": "Applicazione mobile-first per Maria Teresa: agenda consulti, diario esoterico privato, ciclo lunare, menù alchemico, rubrica clienti e strumenti oracolari.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
