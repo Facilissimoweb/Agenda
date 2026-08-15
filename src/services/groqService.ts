@@ -512,3 +512,77 @@ ${realMoon.nutritionImpact.foodsToModerate.map((f) => `- ${f}`).join('\n')}
 
   return `✨ **Parola dell'Oracolo per Maria Teresa:**\n"L'Universo parla il linguaggio dei simboli, della presenza e della risonanza del cuore."\n\nOggi (${fullDateStr}), qualunque sia il quesito che porti nel tuo santuario, fidati del tuo discernimento e della saggezza che risiede dentro di te. Rimani centrata nella tua luce e ogni risposta si manifesterà con perfetta sincronicità.\n\n🌿 *Pace, luce e benedizioni sui tuoi passi.*`;
 }
+
+/**
+ * Transcribe Audio using Groq Whisper API (whisper-large-v3-turbo / whisper-large-v3)
+ * Provides ultra-accurate Italian speech-to-text with punctuation and esoteric vocabulary
+ */
+export async function transcribeAudioWithGroq(
+  audioBlob: Blob,
+  customApiKey?: string
+): Promise<{ text: string; success: boolean; error?: string }> {
+  const apiKey = sanitizeApiKey(customApiKey || getStoredGroqApiKey());
+  if (!apiKey) {
+    return {
+      text: '',
+      success: false,
+      error: 'Chiave API Groq non configurata. Inseriscila nelle impostazioni o nella Chat.',
+    };
+  }
+
+  try {
+    const formData = new FormData();
+    const fileExtension = audioBlob.type.includes('webm')
+      ? 'webm'
+      : audioBlob.type.includes('ogg')
+      ? 'ogg'
+      : audioBlob.type.includes('mp4')
+      ? 'mp4'
+      : 'wav';
+
+    const audioFile = new File([audioBlob], `recording.${fileExtension}`, {
+      type: audioBlob.type || 'audio/webm',
+    });
+
+    formData.append('file', audioFile);
+    formData.append('model', 'whisper-large-v3-turbo');
+    formData.append('language', 'it');
+    formData.append('temperature', '0.0');
+    formData.append('prompt', 'Trascrizione accurata in lingua italiana per diario personale, riflessioni esoteriche, tarocchi, astrologia, meditazioni e rituali.');
+
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Errore API Groq Whisper (${response.status})`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.error?.message) {
+          errorMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      return { text: '', success: false, error: errorMsg };
+    }
+
+    const data = await response.json();
+    const transcribedText = (data?.text || '').trim();
+
+    return {
+      text: transcribedText,
+      success: true,
+    };
+  } catch (err: any) {
+    console.error('Groq Whisper transcription error:', err);
+    return {
+      text: '',
+      success: false,
+      error: err?.message || 'Errore di connessione durante la trascrizione con Groq Whisper',
+    };
+  }
+}
+

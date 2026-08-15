@@ -6,6 +6,7 @@ import {
   isSpeechRecognitionSupported, 
   isSpeechSynthesisSupported 
 } from '../../utils/speech';
+import { transcribeAudioWithGroq, getStoredGroqApiKey } from '../../services/groqService';
 import { 
   BookMarked, 
   Plus, 
@@ -33,7 +34,10 @@ import {
   Check, 
   Music,
   FileCheck,
-  AlertCircle
+  AlertCircle,
+  Cpu,
+  Loader2,
+  Key
 } from 'lucide-react';
 
 interface DiarioViewProps {
@@ -45,13 +49,15 @@ interface DiarioViewProps {
   onSendToChat?: (note: JournalNote) => void;
 }
 
-// Custom Embedded Audio Player for Voice Notes
+// Custom Embedded Audio Player for Voice Notes with Groq AI Transcription
 const AudioPlayerWidget: React.FC<{
   audioUrl: string;
   duration?: number;
   label?: string;
   onDelete?: () => void;
-}> = ({ audioUrl, duration, label, onDelete }) => {
+  onTranscribe?: () => void;
+  isTranscribing?: boolean;
+}> = ({ audioUrl, duration, label, onDelete, onTranscribe, isTranscribing }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -147,16 +153,40 @@ const AudioPlayerWidget: React.FC<{
         />
       </div>
 
-      {onDelete && (
-        <button
-          type="button"
-          onClick={onDelete}
-          className="text-rose-400 hover:text-rose-300 p-1 rounded-lg hover:bg-rose-950/40 transition shrink-0"
-          title="Rimuovi registrazione"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
+      <div className="flex items-center gap-1 shrink-0">
+        {onTranscribe && (
+          <button
+            type="button"
+            onClick={onTranscribe}
+            disabled={isTranscribing}
+            className="px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 hover:text-amber-200 text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            title="Trascrivi questo audio in testo italiano tramite Groq Whisper AI"
+          >
+            {isTranscribing ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                <span>Trascrivo...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                <span>Trascrivi con Groq AI</span>
+              </>
+            )}
+          </button>
+        )}
+
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-rose-400 hover:text-rose-300 p-1 rounded-lg hover:bg-rose-950/40 transition shrink-0"
+            title="Rimuovi registrazione"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -212,6 +242,15 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
   const [isAudioRecording, setIsAudioRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
+  // --- Groq Whisper AI Speech-to-Text State ---
+  const [isGroqDictating, setIsGroqDictating] = useState(false);
+  const [groqDictationSeconds, setGroqDictationSeconds] = useState(0);
+  const [isGroqTranscribing, setIsGroqTranscribing] = useState(false);
+  const [transcribingAudioNoteId, setTranscribingAudioNoteId] = useState<string | number | null>(null);
+  const groqMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const groqAudioChunksRef = useRef<Blob[]>([]);
+  const groqDictationTimerRef = useRef<any>(null);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -226,8 +265,16 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
           mediaRecorderRef.current.stop();
         } catch (e) {}
       }
+      if (groqMediaRecorderRef.current && isGroqDictating) {
+        try {
+          groqMediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
+      }
+      if (groqDictationTimerRef.current) {
+        clearInterval(groqDictationTimerRef.current);
       }
     };
   }, []);
@@ -385,6 +432,136 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
     setIsDictating(true);
     onShowToast('🎙️ Dettatura attiva: parla liberamente, trascrizione in tempo reale...');
     startDictationEngine();
+  };
+
+  // --- GROQ WHISPER AI HIGH-PRECISION SPEECH-TO-TEXT ---
+  const startGroqWhisperDictation = async () => {
+    const groqKey = getStoredGroqApiKey();
+    if (!groqKey) {
+      onShowToast('⚠️ Suggerimento: configuri la chiave Groq per la massima precisione, o usa la dettatura browser.');
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      groqAudioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      groqMediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          groqAudioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const audioBlob = new Blob(groqAudioChunksRef.current, {
+          type: mediaRecorder.mimeType || 'audio/webm',
+        });
+
+        if (audioBlob.size < 1000) {
+          setIsGroqTranscribing(false);
+          setIsGroqDictating(false);
+          onShowToast('Registrazione vocale troppo breve o silenziosa.');
+          return;
+        }
+
+        setIsGroqTranscribing(true);
+        onShowToast('🧠 Groq Whisper AI sta trascrivendo in italiano...');
+
+        const result = await transcribeAudioWithGroq(audioBlob);
+        setIsGroqTranscribing(false);
+
+        if (result.success && result.text) {
+          setFormData((prev) => {
+            const existing = prev.content.trim();
+            const newText = result.text.trim();
+            return {
+              ...prev,
+              content: existing ? `${existing}\n\n${newText}` : newText,
+            };
+          });
+          onShowToast('✨ Dettatura trascritta con successo da Groq Whisper AI!');
+        } else {
+          onShowToast(result.error || 'Trascrizione Groq non riuscita. Verifica la connessione o la chiave API.');
+        }
+      };
+
+      mediaRecorder.start(200);
+      setIsGroqDictating(true);
+      setGroqDictationSeconds(0);
+      groqDictationTimerRef.current = setInterval(() => {
+        setGroqDictationSeconds((sec) => sec + 1);
+      }, 1000);
+      onShowToast('🎙️ Dettatura Groq Whisper attiva: parla liberamente...');
+    } catch (err) {
+      console.error('Error starting Groq Whisper dictation:', err);
+      onShowToast('Permesso microfono non concesso o non disponibile.');
+    }
+  };
+
+  const stopAndTranscribeGroqWhisper = () => {
+    if (groqMediaRecorderRef.current && isGroqDictating) {
+      if (groqDictationTimerRef.current) {
+        clearInterval(groqDictationTimerRef.current);
+        groqDictationTimerRef.current = null;
+      }
+      setIsGroqDictating(false);
+      groqMediaRecorderRef.current.stop();
+    }
+  };
+
+  const cancelGroqWhisperDictation = () => {
+    if (groqMediaRecorderRef.current && isGroqDictating) {
+      groqMediaRecorderRef.current.onstop = null;
+      groqMediaRecorderRef.current.stop();
+      setIsGroqDictating(false);
+      if (groqDictationTimerRef.current) {
+        clearInterval(groqDictationTimerRef.current);
+        groqDictationTimerRef.current = null;
+      }
+      onShowToast('Dettatura Groq Whisper annullata.');
+    }
+  };
+
+  // Convert an existing audio note to text via Groq Whisper
+  const handleTranscribeExistingAudio = async (audioDataUrl: string, targetNoteId?: string | number) => {
+    try {
+      setTranscribingAudioNoteId(targetNoteId || 'modal');
+      onShowToast('🧠 Trascrizione audio con Groq Whisper AI in corso...');
+      const res = await fetch(audioDataUrl);
+      const blob = await res.blob();
+
+      const result = await transcribeAudioWithGroq(blob);
+      setTranscribingAudioNoteId(null);
+
+      if (result.success && result.text) {
+        if (targetNoteId) {
+          const currentNote = notes.find((n) => n.id === targetNoteId);
+          if (currentNote) {
+            const existing = currentNote.content.trim();
+            const updatedContent = existing ? `${existing}\n\n[Trascrizione Groq AI]: ${result.text.trim()}` : result.text.trim();
+            onUpdateNote(targetNoteId, { content: updatedContent });
+          }
+        } else {
+          setFormData((prev) => {
+            const existing = prev.content.trim();
+            const newText = `[Trascrizione Groq AI]: ${result.text.trim()}`;
+            return {
+              ...prev,
+              content: existing ? `${existing}\n\n${newText}` : newText,
+            };
+          });
+        }
+        onShowToast('✨ Audio trascritto e aggiunto alla nota con Groq Whisper AI!');
+      } else {
+        onShowToast(result.error || 'Impossibile completare la trascrizione dell\'audio.');
+      }
+    } catch (err: any) {
+      console.error('Audio transcription error:', err);
+      setTranscribingAudioNoteId(null);
+      onShowToast('Errore durante la trascrizione dell\'audio.');
+    }
   };
 
   // --- 2. AUDIO VOICE RECORDER ---
@@ -696,11 +873,11 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
 
           <div className="p-2.5 rounded-xl bg-[#131127] border border-amber-500/30 flex items-center gap-2 text-xs">
             <div className="w-7 h-7 rounded-lg bg-amber-950/80 flex items-center justify-center text-amber-400 shrink-0">
-              <Mic className="w-3.5 h-3.5" />
+              <Cpu className="w-3.5 h-3.5" />
             </div>
             <div>
-              <p className="font-semibold text-white text-[11px]">Dettatura & Audio</p>
-              <p className="text-[10px] text-purple-300/70">Microfono & Player</p>
+              <p className="font-semibold text-white text-[11px]">Groq Whisper AI</p>
+              <p className="text-[10px] text-amber-300/80">Dettatura & Trascrizione</p>
             </div>
           </div>
 
@@ -848,6 +1025,8 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                     audioUrl={note.audioRecording.dataUrl}
                     duration={note.audioRecording.duration}
                     label={`Nota Vocale registrata (${note.audioRecording.dateAdded || 'Audio'})`}
+                    onTranscribe={() => handleTranscribeExistingAudio(note.audioRecording!.dataUrl, note.id)}
+                    isTranscribing={transcribingAudioNoteId === note.id}
                   />
                 </div>
               )}
@@ -1085,40 +1264,123 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                 </label>
               </div>
 
-              {/* Content Textarea with Live Dictation Button */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-purple-300 font-medium">Contenuto della Nota *</label>
+              {/* Content Textarea with Groq Whisper & Live Dictation Buttons */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-purple-300 font-medium">Contenuto della Nota *</label>
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-400/10 text-amber-300 border border-amber-400/20 font-mono">
+                      <Cpu className="w-2.5 h-2.5" /> Groq Whisper AI
+                    </span>
+                  </div>
 
-                  {/* Dictation (Speech to Text) Button */}
-                  <button
-                    type="button"
-                    onClick={toggleDictation}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                      isDictating
-                        ? 'bg-rose-500 text-white animate-pulse shadow-md shadow-rose-500/30'
-                        : 'bg-purple-900/60 hover:bg-purple-800 text-amber-300 border border-purple-500/30'
-                    }`}
-                    title={isDictating ? 'Ferma dettatura' : 'Attiva dettatura vocale in italiano'}
-                  >
-                    {isDictating ? (
-                      <>
-                        <MicOff className="w-3.5 h-3.5 text-white" />
-                        <span>Ferma Dettatura</span>
-                      </>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* PRIMARY: Groq Whisper Speech to Text */}
+                    {!isGroqDictating ? (
+                      <button
+                        type="button"
+                        onClick={startGroqWhisperDictation}
+                        disabled={isGroqTranscribing || isDictating}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-md shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                        title="Dettatura vocale ad altissima precisione in italiano tramite Groq Whisper AI"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Dettatura Groq Whisper AI</span>
+                      </button>
                     ) : (
-                      <>
-                        <Mic className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Dettatura Vocale (Microfono)</span>
-                      </>
+                      <button
+                        type="button"
+                        onClick={stopAndTranscribeGroqWhisper}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 transition animate-pulse cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Ferma & Trascrivi AI</span>
+                      </button>
                     )}
-                  </button>
+
+                    {/* SECONDARY: Instant Browser STT Toggle */}
+                    <button
+                      type="button"
+                      onClick={toggleDictation}
+                      disabled={isGroqDictating || isGroqTranscribing}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                        isDictating
+                          ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                          : 'bg-[#1d1138] hover:bg-[#281b4d] text-purple-300 border border-purple-500/30'
+                      }`}
+                      title="Dettatura istantanea streaming del browser"
+                    >
+                      {isDictating ? (
+                        <>
+                          <MicOff className="w-3 h-3 text-white" />
+                          <span>Stop Browser STT</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-3 h-3 text-purple-400" />
+                          <span>Browser STT</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
+                {/* Groq Whisper Active Recording Bar */}
+                {isGroqDictating && (
+                  <div className="bg-gradient-to-r from-amber-950/80 via-[#2a1b4d] to-purple-950/80 border border-amber-500/50 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg animate-pulse">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-400 text-amber-300 shrink-0">
+                        <Mic className="w-4 h-4 animate-bounce" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                          <span className="font-mono font-bold text-amber-300 text-xs">
+                            ASCOLTO GROQ WHISPER: {Math.floor(groqDictationSeconds / 60).toString().padStart(2, '0')}:{(groqDictationSeconds % 60).toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-purple-200">
+                          Parla liberamente in italiano. Quando finisci, clicca su "Trascrivi Ora con Groq".
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={stopAndTranscribeGroqWhisper}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Trascrivi Ora con Groq</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelGroqWhisperDictation}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+                        title="Annulla dettatura"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Groq Whisper Transcribing Loader */}
+                {isGroqTranscribing && (
+                  <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-xs text-amber-200 flex items-center gap-2.5 animate-pulse">
+                    <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                    <span>
+                      🧠 <strong>Groq Whisper AI</strong> sta elaborando la tua voce e trascrivendo con grammatica e punteggiatura esatta...
+                    </span>
+                  </div>
+                )}
+
+                {/* Browser STT Active State */}
                 {isDictating && (
                   <div className="bg-rose-950/40 border border-rose-500/40 rounded-xl p-2.5 text-[11px] text-rose-200 flex items-center gap-2 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
-                    <span>Microfono attivo: parla liberamente, il testo verrà inserito automaticamente...</span>
+                    <span>Microfono browser attivo: trascrizione in corso...</span>
                   </div>
                 )}
 
@@ -1191,6 +1453,8 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                       audioUrl={formData.audioRecording.dataUrl}
                       duration={formData.audioRecording.duration}
                       label="Nota Vocale Allegata"
+                      onTranscribe={() => handleTranscribeExistingAudio(formData.audioRecording!.dataUrl)}
+                      isTranscribing={transcribingAudioNoteId === 'modal'}
                       onDelete={() => {
                         setFormData({ ...formData, audioRecording: undefined });
                         onShowToast('Registrazione vocale rimossa.');
