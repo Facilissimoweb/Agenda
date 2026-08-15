@@ -201,6 +201,8 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
 
   // Speech-to-Text Dictation State in Modal
   const speechRecognitionRef = useRef<any>(null);
+  const isDictatingRef = useRef<boolean>(false);
+  const dictationBaseTextRef = useRef<string>('');
   const [isDictating, setIsDictating] = useState(false);
 
   // Audio Voice Recorder State in Modal
@@ -269,14 +271,107 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
     setFormData({ ...formData, category: cat, icon });
   };
 
-  // --- 1. SPEECH TO TEXT DICTATION ---
+  // --- 1. SPEECH TO TEXT DICTATION (Continuous & Loop-Free) ---
+  const startDictationEngine = () => {
+    if (!isDictatingRef.current) return;
+
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.abort();
+        } catch (e) {}
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'it-IT';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsDictating(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let sessionFinal = '';
+        let sessionInterim = '';
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            sessionFinal += res[0].transcript + ' ';
+          } else {
+            sessionInterim += res[0].transcript;
+          }
+        }
+
+        const base = (dictationBaseTextRef.current || '').trim();
+        const currentFinal = sessionFinal.trim();
+        const currentInterim = sessionInterim.trim();
+
+        let merged = base;
+        if (currentFinal) {
+          merged = merged ? `${merged} ${currentFinal}` : currentFinal;
+        }
+        if (currentInterim) {
+          merged = merged ? `${merged} ${currentInterim}` : currentInterim;
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          content: merged,
+        }));
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition warning:', event.error);
+        if (event.error === 'not-allowed') {
+          onShowToast('Accesso al microfono negato nelle impostazioni del browser.');
+          isDictatingRef.current = false;
+          setIsDictating(false);
+        }
+      };
+
+      recognition.onend = () => {
+        // Auto-restart smoothly if user is still in dictation mode
+        if (isDictatingRef.current) {
+          setFormData((prev) => {
+            dictationBaseTextRef.current = prev.content;
+            return prev;
+          });
+          setTimeout(() => {
+            if (isDictatingRef.current) {
+              startDictationEngine();
+            }
+          }, 150);
+        } else {
+          setIsDictating(false);
+        }
+      };
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (e: any) {
+      console.error('Dictation error:', e);
+      if (!isDictatingRef.current) {
+        setIsDictating(false);
+      }
+    }
+  };
+
   const toggleDictation = () => {
     if (isDictating) {
-      if (speechRecognitionRef.current) {
-        speechRecognitionRef.current.stop();
-      }
+      isDictatingRef.current = false;
       setIsDictating(false);
-      onShowToast('Dettatura vocale interrotta.');
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch (e) {}
+      }
+      onShowToast('Dettatura vocale completata.');
       return;
     }
 
@@ -285,52 +380,11 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
       return;
     }
 
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'it-IT';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        setIsDictating(true);
-        onShowToast('🎙️ Dettatura attiva: parla in italiano per trascrivere le tue riflessioni...');
-      };
-
-      recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setFormData((prev) => ({
-            ...prev,
-            content: prev.content ? `${prev.content} ${finalTranscript}` : finalTranscript,
-          }));
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error in diary:', event.error);
-        if (event.error === 'not-allowed') {
-          onShowToast('Accesso al microfono negato. Consenti il microfono nelle impostazioni del browser.');
-          setIsDictating(false);
-        }
-      };
-
-      recognition.onend = () => {
-        setIsDictating(false);
-      };
-
-      speechRecognitionRef.current = recognition;
-      recognition.start();
-    } catch (e: any) {
-      console.error('Dictation start error:', e);
-      setIsDictating(false);
-      onShowToast('Errore nell\'avvio della dettatura vocale.');
-    }
+    isDictatingRef.current = true;
+    dictationBaseTextRef.current = formData.content || '';
+    setIsDictating(true);
+    onShowToast('🎙️ Dettatura attiva: parla liberamente, trascrizione in tempo reale...');
+    startDictationEngine();
   };
 
   // --- 2. AUDIO VOICE RECORDER ---

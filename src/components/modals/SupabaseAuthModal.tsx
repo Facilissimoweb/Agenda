@@ -592,17 +592,48 @@ export const SupabaseAuthModal: React.FC<SupabaseAuthModalProps> = ({
           {/* TAB 3: SQL SCHEMA SCRIPT */}
           {activeTab === 'sql' && (
             <div className="space-y-3">
-              <div className="bg-[#181133] border border-purple-500/30 p-3.5 rounded-xl space-y-1.5">
-                <span className="font-bold text-amber-300 block text-xs">
-                  Creazione Automatica Tabelle su Supabase
-                </span>
+              <div className="bg-[#181133] border border-purple-500/30 p-3.5 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-300 block text-xs">
+                    ⚡ Schema SQL Completo & Migrazione (PDF, Foto e Registrazioni Audio)
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-semibold">
+                    Versione Aggiornata
+                  </span>
+                </div>
                 <p className="text-[11px] text-purple-200 leading-relaxed">
-                  Per far sì che Supabase possa salvare appuntamenti, clienti, diario, ciclo e menù, esegui questo script una sola volta in <strong>Supabase → SQL Editor → New Query → Run</strong>.
+                  Per sincronizzare i nuovi allegati PDF, le immagini e le registrazioni audio del diario, esegui questo script in <strong>Supabase → SQL Editor → New Query → Run</strong>. Se hai già creato le tabelle in passato, il comando <code>ALTER TABLE</code> aggiungerà automaticamente i nuovi campi senza cancellare i dati esistenti!
+                </p>
+              </div>
+
+              {/* Quick 1-click update query for existing users */}
+              <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-300">
+                    🔧 Se hai già il database attivo (Aggiornamento Rapido in 2 secondi):
+                  </span>
+                  <button
+                    onClick={() => {
+                      const quickSql = `ALTER TABLE journal_notes ADD COLUMN IF NOT EXISTS attachments JSONB;
+ALTER TABLE journal_notes ADD COLUMN IF NOT EXISTS audio_recording JSONB;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS birth_date TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Cliente Abituale';`;
+                      navigator.clipboard.writeText(quickSql);
+                      onShowToast('📋 Script rapido di aggiornamento copiato!');
+                    }}
+                    className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px] rounded-lg transition flex items-center gap-1 shadow cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copia Solo Aggiornamento Tabelle</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-purple-200 font-mono">
+                  ALTER TABLE journal_notes ADD COLUMN IF NOT EXISTS attachments JSONB; audio_recording JSONB;
                 </p>
               </div>
 
               <div className="relative">
-                <pre className="p-3 bg-[#0a0715] border border-[#2a244d] rounded-xl font-mono text-[10px] text-emerald-300/90 overflow-x-auto max-h-56 select-all">
+                <pre className="p-3 bg-[#0a0715] border border-[#2a244d] rounded-xl font-mono text-[10px] text-emerald-300/90 overflow-x-auto max-h-52 select-all">
                   {SUPABASE_SQL_SCHEMA}
                 </pre>
 

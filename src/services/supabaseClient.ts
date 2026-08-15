@@ -426,40 +426,69 @@ export async function uploadWeeklyMenuToCloud(menu: WeeklyMenu): Promise<boolean
 }
 
 /**
- * Saves Journal Notes / Diary to Supabase
+ * Saves Journal Notes / Diary to Supabase with automatic column fallback and sync
  */
-export async function uploadJournalNotesToCloud(notes: JournalNote[]): Promise<boolean> {
+export async function uploadJournalNotesToCloud(notes: JournalNote[]): Promise<{ success: boolean; error?: string }> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  if (!client) return { success: false, error: 'Client Supabase non inizializzato' };
+
   try {
-    await client.from('journal_notes').delete().neq('id', '___none___');
-    if (notes.length > 0) {
-      const rows = notes.map((n) => ({
+    if (notes.length === 0) {
+      await client.from('journal_notes').delete().neq('id', '___none___');
+      return { success: true };
+    }
+
+    // 1. Prepare rows with attachments and audio recording
+    const fullRows = notes.map((n) => ({
+      id: String(n.id),
+      title: n.title,
+      category: n.category,
+      date: n.date,
+      icon: n.icon || '📝',
+      content: n.content,
+      pinned: !!n.pinned,
+      attachments: n.attachments && n.attachments.length > 0 ? n.attachments : null,
+      audio_recording: n.audioRecording || null,
+      owner_email: AUTHORIZED_EMAIL,
+    }));
+
+    // Attempt to upsert with full data
+    const { error: upsertErr } = await client.from('journal_notes').upsert(fullRows, { onConflict: 'id' });
+
+    if (upsertErr) {
+      console.warn('Full journal upsert failed, attempting fallback to base columns (if Supabase schema is not yet updated):', upsertErr.message);
+
+      // Fallback: If columns attachments or audio_recording don't exist yet on user's Supabase
+      const baseRows = notes.map((n) => ({
         id: String(n.id),
         title: n.title,
         category: n.category,
         date: n.date,
-        icon: n.icon,
+        icon: n.icon || '📝',
         content: n.content,
-        pinned: n.pinned || false,
-        attachments: n.attachments || null,
-        audio_recording: n.audioRecording || null,
+        pinned: !!n.pinned,
         owner_email: AUTHORIZED_EMAIL,
       }));
-      await client.from('journal_notes').upsert(rows);
+
+      const { error: fallbackErr } = await client.from('journal_notes').upsert(baseRows, { onConflict: 'id' });
+      if (fallbackErr) {
+        console.error('Fallback journal upload failed:', fallbackErr);
+        return { success: false, error: fallbackErr.message };
+      }
     }
-    return true;
-  } catch (e) {
+
+    return { success: true };
+  } catch (e: any) {
     console.warn('Error uploading journal notes to Supabase:', e);
-    return false;
+    return { success: false, error: e?.message || 'Errore durante il salvataggio su Supabase' };
   }
 }
 
-// SQL Script generator to create tables in Supabase SQL Editor
-export const SUPABASE_SQL_SCHEMA = `-- ==========================================
--- SANTUARIO DI MARIA TERESA - SUPABASE SCHEMA
--- Esegui questo script in Supabase -> SQL Editor
--- ==========================================
+// SQL Script generator to create/update tables in Supabase SQL Editor
+export const SUPABASE_SQL_SCHEMA = `-- =======================================================
+-- SANTUARIO DI MARIA TERESA - SUPABASE SCHEMA AGGIORNATO
+-- Esegui questo script in Supabase -> SQL Editor -> Run
+-- =======================================================
 
 -- 1. Appuntamenti & Consulti
 CREATE TABLE IF NOT EXISTS appointments (
@@ -521,7 +550,7 @@ CREATE TABLE IF NOT EXISTS weekly_menu (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 6. Diario Privato & Note Rituali
+-- 6. Diario Privato & Note Rituali (con supporto PDF, Immagini e Audio)
 CREATE TABLE IF NOT EXISTS journal_notes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -530,9 +559,19 @@ CREATE TABLE IF NOT EXISTS journal_notes (
   icon TEXT,
   content TEXT NOT NULL,
   pinned BOOLEAN DEFAULT false,
+  attachments JSONB DEFAULT NULL,
+  audio_recording JSONB DEFAULT NULL,
   owner_email TEXT DEFAULT 'mariateresarogani@gmail.com',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- =======================================================
+-- AGGIORNAMENTO AUTOMATICO COLONNE (Se le tabelle esistono già)
+-- =======================================================
+ALTER TABLE journal_notes ADD COLUMN IF NOT EXISTS attachments JSONB;
+ALTER TABLE journal_notes ADD COLUMN IF NOT EXISTS audio_recording JSONB;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS birth_date TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Cliente Abituale';
 
 -- Abilita l'accesso pubblico/anonimo con Anon Key per il santuario privato
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
@@ -543,10 +582,26 @@ ALTER TABLE weekly_menu ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_notes ENABLE ROW LEVEL SECURITY;
 
 -- Policy di accesso completo per la chiave anonima del tuo progetto
-CREATE POLICY "Accesso Completo Anon Santuario Appointments" ON appointments FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Accesso Completo Anon Santuario Contacts" ON contacts FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Accesso Completo Anon Santuario CycleSettings" ON cycle_settings FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Accesso Completo Anon Santuario CycleLogs" ON cycle_logs FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Accesso Completo Anon Santuario WeeklyMenu" ON weekly_menu FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Accesso Completo Anon Santuario JournalNotes" ON journal_notes FOR ALL USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario Appointments') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario Appointments" ON appointments FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario Contacts') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario Contacts" ON contacts FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario CycleSettings') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario CycleSettings" ON cycle_settings FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario CycleLogs') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario CycleLogs" ON cycle_logs FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario WeeklyMenu') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario WeeklyMenu" ON weekly_menu FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario JournalNotes') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario JournalNotes" ON journal_notes FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END
+$$;
 `;

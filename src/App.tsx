@@ -97,13 +97,7 @@ export default function App() {
       const saved = localStorage.getItem('mt_notes');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // If parsed is array and has elements
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // If the user's saved notes don't have attachments on note-1, merge demo attachments
-          const hasAnyAttachments = parsed.some((n: JournalNote) => n.attachments && n.attachments.length > 0);
-          if (!hasAnyAttachments) {
-            return INITIAL_JOURNAL_NOTES;
-          }
           return parsed;
         }
       }
