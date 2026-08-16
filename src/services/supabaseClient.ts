@@ -589,6 +589,23 @@ CREATE TABLE IF NOT EXISTS journal_notes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
+-- 7. Biblioteca Sacra & Grimori AI (Manuali e Testi Consultabili dall'Oracolo)
+CREATE TABLE IF NOT EXISTS sacred_books (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  author TEXT DEFAULT 'Maria Teresa',
+  category TEXT DEFAULT 'personale',
+  description TEXT,
+  cover_emoji TEXT DEFAULT '📖',
+  sections JSONB DEFAULT '[]'::jsonb,
+  full_text TEXT,
+  tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+  is_enabled BOOLEAN DEFAULT true,
+  is_custom BOOLEAN DEFAULT true,
+  owner_email TEXT DEFAULT 'mariateresarogani@gmail.com',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- =======================================================
 -- AGGIORNAMENTO AUTOMATICO COLONNE (Se le tabelle esistono già)
 -- =======================================================
@@ -604,6 +621,7 @@ ALTER TABLE cycle_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cycle_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weekly_menu ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sacred_books ENABLE ROW LEVEL SECURITY;
 
 -- Policy di accesso completo per la chiave anonima del tuo progetto
 DO $$
@@ -625,6 +643,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario JournalNotes') THEN
     CREATE POLICY "Accesso Completo Anon Santuario JournalNotes" ON journal_notes FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Accesso Completo Anon Santuario SacredBooks') THEN
+    CREATE POLICY "Accesso Completo Anon Santuario SacredBooks" ON sacred_books FOR ALL USING (true) WITH CHECK (true);
   END IF;
 END
 $$;

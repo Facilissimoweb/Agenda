@@ -28,6 +28,7 @@ import { DiarioView } from './components/views/DiarioView';
 import { StrumentiView } from './components/views/StrumentiView';
 import { ChatView } from './components/views/ChatView';
 import { SupabaseAuthModal } from './components/modals/SupabaseAuthModal';
+import { GoogleDriveModal } from './components/modals/GoogleDriveModal';
 import { PrivacyGate } from './components/PrivacyGate';
 import { 
   getSupabaseConfig, 
@@ -40,6 +41,9 @@ import {
   uploadJournalNotesToCloud,
   subscribeToAuthStateChange
 } from './services/supabaseClient';
+import { initDriveAuth, isDriveAuthenticated } from './services/googleDriveService';
+import { getStoredGrimoires, saveStoredGrimoires } from './services/grimoireService';
+import { SacredBook } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -119,6 +123,31 @@ export default function App() {
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const initialLoadDone = useRef<boolean>(false);
+
+  // Google Drive state
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
+  const [isDriveConnected, setIsDriveConnected] = useState<boolean>(false);
+
+  // Sacred Books / Grimoires state for full backup & drive import
+  const [sacredBooks, setSacredBooks] = useState<SacredBook[]>(() => {
+    return getStoredGrimoires();
+  });
+
+  const handleUpdateSacredBooks = useCallback((updated: SacredBook[]) => {
+    setSacredBooks(updated);
+    saveStoredGrimoires(updated);
+  }, []);
+
+  // Check Google Drive Auth State Listener on Mount
+  useEffect(() => {
+    const unsubDrive = initDriveAuth(
+      () => setIsDriveConnected(true),
+      () => setIsDriveConnected(false)
+    );
+    return () => {
+      unsubDrive?.();
+    };
+  }, []);
 
   // Check Supabase on Mount & Download Data
   useEffect(() => {
@@ -411,6 +440,8 @@ export default function App() {
           appointmentsCount={appointments.length}
           isCloudConnected={isCloudConnected}
           onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+          isDriveConnected={isDriveConnected}
+          onOpenGoogleDriveModal={() => setIsGoogleDriveModalOpen(true)}
           onLockSanctuary={handleLock}
         />
 
@@ -501,6 +532,7 @@ export default function App() {
                   pendingPrompt={pendingChatPrompt}
                   onClearPendingPrompt={() => setPendingChatPrompt(null)}
                   onShowToast={showToast}
+                  onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
                 />
               )}
             </motion.div>
@@ -532,6 +564,20 @@ export default function App() {
         onShowToast={showToast}
         onSyncAll={handleFullSync}
         isSyncing={isSyncing}
+      />
+
+      {/* Google Drive Integration Modal */}
+      <GoogleDriveModal
+        isOpen={isGoogleDriveModalOpen}
+        onClose={() => setIsGoogleDriveModalOpen(false)}
+        appointments={appointments}
+        contacts={contacts}
+        cycleData={cycleData}
+        weeklyMenu={weeklyMenu}
+        journalNotes={journalNotes}
+        sacredBooks={sacredBooks}
+        onUpdateSacredBooks={handleUpdateSacredBooks}
+        onShowToast={showToast}
       />
 
       {/* Toast Notification Alert */}

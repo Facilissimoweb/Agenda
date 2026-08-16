@@ -31,6 +31,7 @@ interface GrimoireModalProps {
   books: SacredBook[];
   onUpdateBooks: (books: SacredBook[]) => void;
   onShowToast: (msg: string) => void;
+  onOpenGoogleDrive?: () => void;
 }
 
 export const GrimoireModal: React.FC<GrimoireModalProps> = ({
@@ -39,6 +40,7 @@ export const GrimoireModal: React.FC<GrimoireModalProps> = ({
   books,
   onUpdateBooks,
   onShowToast,
+  onOpenGoogleDrive,
 }) => {
   const [selectedBook, setSelectedBook] = useState<SacredBook | null>(null);
   const [activeTab, setActiveTab] = useState<'library' | 'add' | 'guide'>('library');
@@ -514,20 +516,45 @@ export const GrimoireModal: React.FC<GrimoireModalProps> = ({
                 />
               </div>
 
-              {/* Upload file button shortcut */}
-              <div className="bg-[#1b153f] border border-dashed border-amber-400/40 p-3 rounded-2xl flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-amber-300">
-                  <UploadCloud className="w-5 h-5 text-amber-400" />
-                  <div>
-                    <span className="font-semibold text-white">Carica da File (.txt / .md)</span>
-                    <p className="text-[11px] text-purple-300">Incolla o carica un file di testo per compilare automaticamente</p>
+              {/* Upload file button shortcut & Google Drive import */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-[#1b153f] border border-dashed border-amber-400/40 p-3 rounded-2xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-amber-300">
+                    <UploadCloud className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <div>
+                      <span className="font-semibold text-white text-[11px] block">File Locale (.txt / .md)</span>
+                      <p className="text-[10px] text-purple-300">Carica da dispositivo</p>
+                    </div>
                   </div>
+
+                  <label className="px-2.5 py-1.5 bg-purple-900/60 hover:bg-purple-800 border border-purple-400/40 text-amber-300 text-xs font-semibold rounded-xl cursor-pointer transition">
+                    Scegli File
+                    <input type="file" accept=".txt,.md,.json" onChange={handleFileUpload} className="hidden" />
+                  </label>
                 </div>
 
-                <label className="px-3 py-1.5 bg-purple-900/60 hover:bg-purple-800 border border-purple-400/40 text-amber-300 text-xs font-semibold rounded-xl cursor-pointer transition">
-                  Scegli File
-                  <input type="file" accept=".txt,.md,.json" onChange={handleFileUpload} className="hidden" />
-                </label>
+                {onOpenGoogleDrive && (
+                  <div className="bg-[#1b153f] border border-dashed border-blue-400/40 p-3 rounded-2xl flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs text-blue-300">
+                      <ExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-white text-[11px] block">Google Drive</span>
+                        <p className="text-[10px] text-purple-300">Importa da cloud</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenGoogleDrive();
+                      }}
+                      className="px-2.5 py-1.5 bg-blue-900/40 hover:bg-blue-800/60 border border-blue-400/40 text-blue-200 text-xs font-semibold rounded-xl cursor-pointer transition"
+                    >
+                      Apri Drive
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

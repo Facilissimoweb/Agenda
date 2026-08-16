@@ -28,6 +28,8 @@ interface HeaderProps {
   appointmentsCount: number;
   isCloudConnected?: boolean;
   onOpenSupabaseModal: () => void;
+  isDriveConnected?: boolean;
+  onOpenGoogleDriveModal: () => void;
   onLockSanctuary?: () => void;
 }
 
@@ -38,6 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
   appointmentsCount,
   isCloudConnected,
   onOpenSupabaseModal,
+  isDriveConnected,
+  onOpenGoogleDriveModal,
   onLockSanctuary,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -191,49 +195,86 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
 
-                {/* Direct Action Buttons Inside Hamburger: Appuntamenti & Cloud */}
-                <div className="p-3 border-b border-[#2a244d]/70 bg-[#160f33] grid grid-cols-2 gap-2">
-                  {/* Nuovi Appuntamenti */}
-                  <button
-                    onClick={() => {
-                      onOpenNewAppointment();
-                      setIsMenuOpen(false);
-                    }}
-                    className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-md active:scale-95 transition cursor-pointer"
-                  >
-                    <div className="flex items-center gap-1">
-                      <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span className="leading-tight">Appuntamenti</span>
-                    </div>
-                    {appointmentsCount > 0 && (
-                      <span className="text-[10px] font-normal opacity-90">
-                        {appointmentsCount} registrati
-                      </span>
-                    )}
-                  </button>
+                {/* Direct Action Buttons Inside Hamburger: Appuntamenti, Cloud & Google Drive */}
+                <div className="p-3 border-b border-[#2a244d]/70 bg-[#160f33] space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Nuovi Appuntamenti */}
+                    <button
+                      onClick={() => {
+                        onOpenNewAppointment();
+                        setIsMenuOpen(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-md active:scale-95 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-1">
+                        <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span className="leading-tight">Appuntamenti</span>
+                      </div>
+                      {appointmentsCount > 0 && (
+                        <span className="text-[10px] font-normal opacity-90">
+                          {appointmentsCount} registrati
+                        </span>
+                      )}
+                    </button>
 
-                  {/* Cloud Supabase */}
+                    {/* Cloud Supabase */}
+                    <button
+                      onClick={() => {
+                        onOpenSupabaseModal();
+                        setIsMenuOpen(false);
+                      }}
+                      className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer ${
+                        isCloudConnected
+                          ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+                          : 'bg-[#221645] border-purple-500/40 text-purple-200 hover:border-amber-400/50 hover:text-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Supabase</span>
+                        {isCloudConnected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono opacity-80">
+                        {isCloudConnected ? 'Sincronizzato' : 'Configura'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Google Drive Full Width Action */}
                   <button
                     onClick={() => {
-                      onOpenSupabaseModal();
+                      onOpenGoogleDriveModal();
                       setIsMenuOpen(false);
                     }}
-                    className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer ${
-                      isCloudConnected
-                        ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
-                        : 'bg-[#221645] border-purple-500/40 text-purple-200 hover:border-amber-400/50 hover:text-amber-300'
+                    className={`w-full p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition active:scale-98 cursor-pointer ${
+                      isDriveConnected
+                        ? 'bg-blue-950/60 border-blue-500/50 text-blue-200 hover:bg-blue-900/70'
+                        : 'bg-[#1b143b] border-purple-500/40 text-purple-200 hover:border-blue-400/50 hover:text-blue-300'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <Database className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Cloud</span>
-                      {isCloudConnected && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      )}
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                      </svg>
+                      <div className="text-left">
+                        <span className="block font-bold">Google Drive</span>
+                        <span className="block text-[10px] text-purple-300 font-normal">
+                          {isDriveConnected ? 'Connesso • File & Backup' : 'Connetti per Backup & File'}
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-[10px] font-mono opacity-80">
-                      {isCloudConnected ? 'Sincronizzato' : 'Configura'}
-                    </span>
+
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/30">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDriveConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span>{isDriveConnected ? 'Attivo' : 'Apri'}</span>
+                    </div>
                   </button>
                 </div>
 

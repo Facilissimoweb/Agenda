@@ -158,3 +158,23 @@ export interface SacredBook {
   lastUpdated?: string;
 }
 
+export interface GoogleDriveUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
+export interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+  size?: string;
+  iconLink?: string;
+  webViewLink?: string;
+  thumbnailLink?: string;
+  starred?: boolean;
+  parents?: string[];
+}
+

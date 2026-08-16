@@ -59,6 +59,7 @@ interface ChatViewProps {
   onShowToast: (msg: string) => void;
   pendingPrompt?: string | null;
   onClearPendingPrompt?: () => void;
+  onOpenGoogleDrive?: () => void;
 }
 
 const INITIAL_GREETING: ChatMessage = {
@@ -85,7 +86,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   cycleData, 
   onShowToast,
   pendingPrompt,
-  onClearPendingPrompt
+  onClearPendingPrompt,
+  onOpenGoogleDrive,
 }) => {
   // Chat messages state with persistence
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -910,6 +912,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         books={books}
         onUpdateBooks={(updated) => setBooks(updated)}
         onShowToast={onShowToast}
+        onOpenGoogleDrive={onOpenGoogleDrive}
       />
 
       {/* Groq Settings Modal */}
