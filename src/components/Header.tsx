@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { TabId } from '../types';
 import { 
   Calendar, 
@@ -47,24 +48,22 @@ export const Header: React.FC<HeaderProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on click outside or escape key
+  // Close menu on click outside or escape key & prevent body scroll on mobile
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsMenuOpen(false);
     };
 
     if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
     };
   }, [isMenuOpen]);
 
@@ -174,186 +173,252 @@ export const Header: React.FC<HeaderProps> = ({
             {isMenuOpen ? <X className="w-4 h-4" /> : <MenuIcon className="w-4 h-4" />}
           </button>
 
-          {/* Hamburger Dropdown / Modal Menu */}
-          <AnimatePresence>
-            {isMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="absolute right-0 top-12 w-80 bg-[#120d26] border border-amber-400/40 rounded-2xl shadow-2xl overflow-hidden z-50 backdrop-blur-xl"
-              >
-                {/* Menu Header */}
-                <div className="p-3.5 border-b border-[#2a244d] bg-gradient-to-r from-[#1a1236] to-[#120d26] flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-amber-300 font-cinzel text-xs font-bold tracking-wider">
-                    <Sparkle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>SANTUARIO DI MARIA TERESA</span>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/30 text-purple-300 font-mono">
-                    Menù
-                  </span>
-                </div>
+          {/* Centered Mobile-First Modal Menu using Portal to document.body */}
+          {typeof document !== 'undefined' &&
+            createPortal(
+              <AnimatePresence>
+                {isMenuOpen && (
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3.5 sm:p-6 overflow-y-auto">
+                    {/* Dark Backdrop Scrim */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      onClick={() => setIsMenuOpen(false)}
+                      className="fixed inset-0 bg-slate-950/85 backdrop-blur-md"
+                      aria-hidden="true"
+                    />
 
-                {/* Direct Action Buttons Inside Hamburger: Appuntamenti, Cloud & Google Drive */}
-                <div className="p-3 border-b border-[#2a244d]/70 bg-[#160f33] space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Nuovi Appuntamenti */}
-                    <button
-                      onClick={() => {
-                        onOpenNewAppointment();
-                        setIsMenuOpen(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-md active:scale-95 transition cursor-pointer"
+                    {/* Centered Modal Card */}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.92, y: 15 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.92, y: 15 }}
+                      transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+                      className="relative w-full max-w-lg bg-[#120c2b] border-2 border-amber-400/60 rounded-3xl shadow-[0_0_50px_rgba(212,175,55,0.25)] overflow-hidden flex flex-col my-auto max-h-[90vh] z-10 text-left"
                     >
-                      <div className="flex items-center gap-1">
-                        <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span className="leading-tight">Appuntamenti</span>
-                      </div>
-                      {appointmentsCount > 0 && (
-                        <span className="text-[10px] font-normal opacity-90">
-                          {appointmentsCount} registrati
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Cloud Supabase */}
-                    <button
-                      onClick={() => {
-                        onOpenSupabaseModal();
-                        setIsMenuOpen(false);
-                      }}
-                      className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer ${
-                        isCloudConnected
-                          ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
-                          : 'bg-[#221645] border-purple-500/40 text-purple-200 hover:border-amber-400/50 hover:text-amber-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <Database className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Supabase</span>
-                        {isCloudConnected && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        )}
-                      </div>
-                      <span className="text-[10px] font-mono opacity-80">
-                        {isCloudConnected ? 'Sincronizzato' : 'Configura'}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Google Drive Full Width Action */}
-                  <button
-                    onClick={() => {
-                      onOpenGoogleDriveModal();
-                      setIsMenuOpen(false);
-                    }}
-                    className={`w-full p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition active:scale-98 cursor-pointer ${
-                      isDriveConnected
-                        ? 'bg-blue-950/60 border-blue-500/50 text-blue-200 hover:bg-blue-900/70'
-                        : 'bg-[#1b143b] border-purple-500/40 text-purple-200 hover:border-blue-400/50 hover:text-blue-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
-                        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
-                        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
-                        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
-                        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
-                        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
-                      </svg>
-                      <div className="text-left">
-                        <span className="block font-bold">Google Drive</span>
-                        <span className="block text-[10px] text-purple-300 font-normal">
-                          {isDriveConnected ? 'Connesso • File & Backup' : 'Connetti per Backup & File'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/30">
-                      <span className={`w-1.5 h-1.5 rounded-full ${isDriveConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                      <span>{isDriveConnected ? 'Attivo' : 'Apri'}</span>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Primary Requested Hierarchy: STRUMENTI / DIARIO / RUBRICA / CICLO / MENU */}
-                <div className="p-2 space-y-1">
-                  <span className="text-[9px] uppercase tracking-widest text-purple-400/70 font-semibold px-2 pt-1 block">
-                    Sezioni Principali
-                  </span>
-                  {hierarchyMenu.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = activeTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNavigate(item.id)}
-                        className={`w-full p-2.5 rounded-xl transition-all flex items-center justify-between group text-left cursor-pointer ${
-                          isActive
-                            ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20'
-                            : 'hover:bg-[#201642] text-purple-100'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg border ${
-                            isActive ? 'bg-slate-950/20 border-slate-950/30 text-slate-950' : item.accent
-                          }`}>
-                            <Icon className="w-4 h-4" />
+                      {/* Modal Header */}
+                      <div className="p-4 border-b border-[#2a244d] bg-gradient-to-r from-[#1e1342] via-[#160f33] to-[#120c2b] flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-full bg-[#24174d] border border-amber-400/60 flex items-center justify-center text-amber-300 text-base shadow">
+                            🌙
                           </div>
                           <div>
-                            <span className={`block font-cinzel font-bold text-xs tracking-wider ${
-                              isActive ? 'text-slate-950' : 'text-amber-200 group-hover:text-amber-300'
-                            }`}>
-                              {item.label}
-                            </span>
-                            <span className={`block text-[10px] ${
-                              isActive ? 'text-slate-900/80 font-normal' : 'text-purple-300/70'
-                            }`}>
-                              {item.desc}
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-cinzel text-sm font-bold tracking-wider gold-gradient-text block">
+                                MARIA TERESA
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-purple-300/80 font-light tracking-wider uppercase block">
+                              Menù Principale & Santuario
                             </span>
                           </div>
                         </div>
 
-                        <ChevronRight className={`w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 ${
-                          isActive ? 'text-slate-950' : 'text-purple-400'
-                        }`} />
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Quick Secondary Links */}
-                <div className="p-2.5 border-t border-[#2a244d] bg-[#0c081c] space-y-1">
-                  <span className="text-[9px] uppercase tracking-widest text-purple-400/70 font-semibold px-2 block">
-                    Accesso Rapido
-                  </span>
-                  <div className="grid grid-cols-3 gap-1 pt-0.5">
-                    {quickLinks.map((q) => {
-                      const Icon = q.icon;
-                      const isQActive = activeTab === q.id;
-                      return (
                         <button
-                          key={q.id}
-                          onClick={() => handleNavigate(q.id)}
-                          className={`p-2 rounded-lg text-center transition flex flex-col items-center gap-1 cursor-pointer ${
-                            isQActive
-                              ? 'bg-amber-400/20 border border-amber-400/40 text-amber-300 font-semibold'
-                              : 'bg-[#150f2e] border border-purple-500/20 text-purple-300 hover:text-white hover:bg-[#1f1642]'
-                          }`}
+                          onClick={() => setIsMenuOpen(false)}
+                          className="p-2.5 rounded-full bg-purple-950/90 hover:bg-purple-900 border border-amber-400/50 text-amber-300 hover:text-white transition cursor-pointer shadow-md"
+                          aria-label="Chiudi menu"
                         >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span className="text-[9px] truncate max-w-[70px]">{q.label}</span>
+                          <X className="w-4 h-4 stroke-[2.5]" />
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
 
-              </motion.div>
+                      {/* Modal Scrollable Body */}
+                      <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4">
+                        
+                        {/* Top Action Cards: Appuntamenti, Cloud & Google Drive */}
+                        <div className="space-y-2.5">
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {/* Nuovi Appuntamenti */}
+                            <button
+                              onClick={() => {
+                                onOpenNewAppointment();
+                                setIsMenuOpen(false);
+                              }}
+                              className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-lg active:scale-95 transition cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Plus className="w-4 h-4 stroke-[2.5]" />
+                                <span className="leading-tight text-xs font-cinzel">Appuntamenti</span>
+                              </div>
+                              {appointmentsCount > 0 ? (
+                                <span className="text-[11px] font-medium opacity-90">
+                                  {appointmentsCount} registrati
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-medium opacity-90">
+                                  Nuovo consulto
+                                </span>
+                              )}
+                            </button>
+
+                            {/* Cloud Supabase */}
+                            <button
+                              onClick={() => {
+                                onOpenSupabaseModal();
+                                setIsMenuOpen(false);
+                              }}
+                              className={`p-3.5 rounded-2xl border text-xs font-semibold flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-md ${
+                                isCloudConnected
+                                  ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+                                  : 'bg-[#1e133d] border-purple-500/40 text-purple-200 hover:border-amber-400/50 hover:text-amber-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Database className="w-4 h-4 text-emerald-400" />
+                                <span className="font-cinzel">Supabase</span>
+                                {isCloudConnected && (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                )}
+                              </div>
+                              <span className="text-[11px] font-mono opacity-80">
+                                {isCloudConnected ? 'Sincronizzato' : 'Configura Cloud'}
+                              </span>
+                            </button>
+                          </div>
+
+                          {/* Google Drive Action */}
+                          <button
+                            onClick={() => {
+                              onOpenGoogleDriveModal();
+                              setIsMenuOpen(false);
+                            }}
+                            className={`w-full p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between transition active:scale-98 cursor-pointer shadow-md ${
+                              isDriveConnected
+                                ? 'bg-blue-950/60 border-blue-500/50 text-blue-200 hover:bg-blue-900/70'
+                                : 'bg-[#181136] border-purple-500/40 text-purple-200 hover:border-blue-400/50 hover:text-blue-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <svg className="w-5 h-5 shrink-0" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                                <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                                <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                                <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                                <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                                <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                              </svg>
+                              <div className="text-left">
+                                <span className="block font-bold font-cinzel text-xs text-white">Google Drive</span>
+                                <span className="block text-[11px] text-purple-300 font-normal">
+                                  {isDriveConnected ? 'Connesso • Backup & File Grimoire' : 'Connetti per Backup & File'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-[11px] font-mono px-3 py-1 rounded-full bg-purple-950 border border-purple-500/30">
+                              <span className={`w-2 h-2 rounded-full ${isDriveConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                              <span>{isDriveConnected ? 'Attivo' : 'Apri'}</span>
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* Primary Hierarchy: STRUMENTI / DIARIO / RUBRICA / CICLO / MENU */}
+                        <div className="space-y-2 pt-1">
+                          <div className="flex items-center justify-between px-2">
+                            <span className="text-[11px] uppercase tracking-widest text-amber-400/90 font-bold font-cinzel">
+                              Sezioni Principali
+                            </span>
+                            <span className="text-[10px] text-purple-400/80 font-mono">
+                              5 Sezioni
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-1.5">
+                            {hierarchyMenu.map((item) => {
+                              const Icon = item.icon;
+                              const isActive = activeTab === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleNavigate(item.id)}
+                                  className={`w-full p-3 rounded-2xl transition-all flex items-center justify-between group text-left cursor-pointer ${
+                                    isActive
+                                      ? 'bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-400/20 scale-[1.01]'
+                                      : 'hover:bg-[#211642] bg-[#150f2f] border border-purple-500/20 text-purple-100'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`p-2.5 rounded-xl border shrink-0 ${
+                                      isActive ? 'bg-slate-950/20 border-slate-950/30 text-slate-950' : item.accent
+                                    }`}>
+                                      <Icon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                      <span className={`block font-cinzel font-bold text-xs tracking-wider ${
+                                        isActive ? 'text-slate-950' : 'text-amber-200 group-hover:text-amber-300'
+                                      }`}>
+                                        {item.label}
+                                      </span>
+                                      <span className={`block text-[11px] leading-snug ${
+                                        isActive ? 'text-slate-900/90 font-normal' : 'text-purple-300/75'
+                                      }`}>
+                                        {item.desc}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <ChevronRight className={`w-4 h-4 shrink-0 transition-transform group-hover:translate-x-1 ${
+                                    isActive ? 'text-slate-950' : 'text-purple-400'
+                                  }`} />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Quick Secondary Links */}
+                        <div className="p-3.5 rounded-2xl border border-[#2a244d] bg-[#0c081c] space-y-2.5">
+                          <span className="text-[10px] uppercase tracking-widest text-purple-400 font-semibold px-1 block font-cinzel">
+                            Accesso Rapido
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {quickLinks.map((q) => {
+                              const Icon = q.icon;
+                              const isQActive = activeTab === q.id;
+                              return (
+                                <button
+                                  key={q.id}
+                                  onClick={() => handleNavigate(q.id)}
+                                  className={`p-2.5 rounded-xl text-center transition flex flex-col items-center gap-1 cursor-pointer ${
+                                    isQActive
+                                      ? 'bg-amber-400/20 border border-amber-400/50 text-amber-300 font-bold'
+                                      : 'bg-[#150f2e] border border-purple-500/20 text-purple-300 hover:text-white hover:bg-[#1f1642]'
+                                  }`}
+                                >
+                                  <Icon className="w-4 h-4 text-amber-400/90" />
+                                  <span className="text-[10px] truncate max-w-[80px]">{q.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Privacy Lock Action Inside Modal */}
+                        {onLockSanctuary && (
+                          <div className="pt-1">
+                            <button
+                              onClick={() => {
+                                setIsMenuOpen(false);
+                                onLockSanctuary();
+                              }}
+                              className="w-full p-3 rounded-2xl border border-rose-500/30 bg-rose-950/30 hover:bg-rose-950/60 text-rose-300 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+                            >
+                              <Lock className="w-4 h-4" />
+                              <span>Blocca Santuario (Privacy ficoinfiore)</span>
+                            </button>
+                          </div>
+                        )}
+
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>,
+              document.body
             )}
-          </AnimatePresence>
         </div>
 
       </div>
