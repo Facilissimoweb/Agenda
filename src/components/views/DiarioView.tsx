@@ -37,8 +37,12 @@ import {
   AlertCircle,
   Cpu,
   Loader2,
-  Key
+  Key,
+  BookOpen,
+  Brain,
+  Cloud
 } from 'lucide-react';
+import { SmartReadingAnalyzer } from './SmartReadingAnalyzer';
 
 interface DiarioViewProps {
   notes: JournalNote[];
@@ -46,7 +50,8 @@ interface DiarioViewProps {
   onUpdateNote: (id: string | number, updated: Partial<JournalNote>) => void;
   onDeleteNote: (id: string | number) => void;
   onShowToast: (msg: string) => void;
-  onSendToChat?: (note: JournalNote) => void;
+  onSendToChat?: (noteOrPrompt: JournalNote | string) => void;
+  onOpenGoogleDriveModal?: () => void;
 }
 
 // Custom Embedded Audio Player for Voice Notes with Groq AI Transcription
@@ -198,15 +203,17 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
   onDeleteNote,
   onShowToast,
   onSendToChat,
+  onOpenGoogleDriveModal,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('tutti');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingNote, setEditingNote] = useState<JournalNote | null>(null);
 
-  // Lightbox & PDF viewer modals state
+  // Lightbox, PDF and Text viewer modals state
   const [previewPdfUrl, setPreviewPdfUrl] = useState<{ url: string; name: string } | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; name: string } | null>(null);
+  const [previewTextModal, setPreviewTextModal] = useState<{ name: string; content: string } | null>(null);
 
   // Text to Speech playback state for notes list
   const [speakingNoteId, setSpeakingNoteId] = useState<string | number | null>(null);
@@ -634,7 +641,7 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
     }
   };
 
-  // --- 3. ATTACHMENT UPLOADER (PDF & IMAGES) ---
+  // --- 3. ATTACHMENT UPLOADER (PDF, IMAGES & TEXT FILES) ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -648,35 +655,62 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
 
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
       const isImage = file.type.startsWith('image/');
+      const isText = 
+        file.type.startsWith('text/') || 
+        file.name.toLowerCase().endsWith('.txt') || 
+        file.name.toLowerCase().endsWith('.md') || 
+        file.name.toLowerCase().endsWith('.json');
 
-      if (!isPdf && !isImage) {
-        onShowToast(`Formato non supportato per "${file.name}". Carica immagini (JPG, PNG) o documenti PDF.`);
+      if (!isPdf && !isImage && !isText) {
+        onShowToast(`Formato non supportato per "${file.name}". Carica immagini, documenti PDF o file di testo (.txt).`);
         return;
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const formattedSize =
-          file.size < 1024 * 1024
-            ? `${(file.size / 1024).toFixed(0)} KB`
-            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      const formattedSize =
+        file.size < 1024 * 1024
+          ? `${(file.size / 1024).toFixed(0)} KB`
+          : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
-        const newAttachment: JournalAttachment = {
-          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: file.name,
-          type: isPdf ? 'pdf' : 'image',
-          dataUrl,
-          size: formattedSize,
+      if (isText) {
+        const textReader = new FileReader();
+        textReader.onloadend = () => {
+          const content = textReader.result as string;
+          const newAttachment: JournalAttachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            type: 'text',
+            dataUrl: 'data:text/plain;charset=utf-8,' + encodeURIComponent(content),
+            size: formattedSize,
+            textContent: content,
+          };
+
+          setFormData((prev) => ({
+            ...prev,
+            attachments: [...prev.attachments, newAttachment],
+          }));
+          onShowToast(`File di testo "${file.name}" aggiunto alla nota.`);
         };
+        textReader.readAsText(file);
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          const newAttachment: JournalAttachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            type: isPdf ? 'pdf' : 'image',
+            dataUrl,
+            size: formattedSize,
+          };
 
-        setFormData((prev) => ({
-          ...prev,
-          attachments: [...prev.attachments, newAttachment],
-        }));
-        onShowToast(`File ${isPdf ? 'PDF' : 'immagine'} "${file.name}" aggiunto alla nota.`);
-      };
-      reader.readAsDataURL(file);
+          setFormData((prev) => ({
+            ...prev,
+            attachments: [...prev.attachments, newAttachment],
+          }));
+          onShowToast(`File ${isPdf ? 'PDF' : 'immagine'} "${file.name}" aggiunto alla nota.`);
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     e.target.value = '';
@@ -770,34 +804,60 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
 
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
       const isImage = file.type.startsWith('image/');
+      const isText = 
+        file.type.startsWith('text/') || 
+        file.name.toLowerCase().endsWith('.txt') || 
+        file.name.toLowerCase().endsWith('.md') || 
+        file.name.toLowerCase().endsWith('.json');
 
-      if (!isPdf && !isImage) {
-        onShowToast(`Formato non supportato per "${file.name}". Carica PDF o immagini.`);
+      if (!isPdf && !isImage && !isText) {
+        onShowToast(`Formato non supportato per "${file.name}". Carica PDF, immagini o file .txt.`);
         return;
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const formattedSize =
-          file.size < 1024 * 1024
-            ? `${(file.size / 1024).toFixed(0)} KB`
-            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      const formattedSize =
+        file.size < 1024 * 1024
+          ? `${(file.size / 1024).toFixed(0)} KB`
+          : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
-        const newAttachment: JournalAttachment = {
-          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: file.name,
-          type: isPdf ? 'pdf' : 'image',
-          dataUrl,
-          size: formattedSize,
+      if (isText) {
+        const textReader = new FileReader();
+        textReader.onloadend = () => {
+          const content = textReader.result as string;
+          const newAttachment: JournalAttachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            type: 'text',
+            dataUrl: 'data:text/plain;charset=utf-8,' + encodeURIComponent(content),
+            size: formattedSize,
+            textContent: content,
+          };
+
+          const currentNote = notes.find((n) => n.id === noteId);
+          const existingAttachments = currentNote?.attachments || [];
+          onUpdateNote(noteId, { attachments: [...existingAttachments, newAttachment] });
+          onShowToast(`File di testo "${file.name}" allegato alla nota!`);
         };
+        textReader.readAsText(file);
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          const newAttachment: JournalAttachment = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            type: isPdf ? 'pdf' : 'image',
+            dataUrl,
+            size: formattedSize,
+          };
 
-        const currentNote = notes.find((n) => n.id === noteId);
-        const existingAttachments = currentNote?.attachments || [];
-        onUpdateNote(noteId, { attachments: [...existingAttachments, newAttachment] });
-        onShowToast(`File ${isPdf ? 'PDF' : 'immagine'} "${file.name}" allegato alla nota!`);
-      };
-      reader.readAsDataURL(file);
+          const currentNote = notes.find((n) => n.id === noteId);
+          const existingAttachments = currentNote?.attachments || [];
+          onUpdateNote(noteId, { attachments: [...existingAttachments, newAttachment] });
+          onShowToast(`File ${isPdf ? 'PDF' : 'immagine'} "${file.name}" allegato alla nota!`);
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     e.target.value = '';
@@ -892,6 +952,17 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* SMART READING (LETTURA INTELLIGENTE & GOOGLE DRIVE) SECTION */}
+      <SmartReadingAnalyzer
+        onSendToChat={(prompt) => {
+          if (onSendToChat) onSendToChat(prompt);
+        }}
+        onSaveAsJournalNote={(newNote) => onAddNote(newNote)}
+        onShowToast={onShowToast}
+        onOpenGoogleDriveModal={onOpenGoogleDriveModal}
+        journalNotes={notes}
+      />
 
       {/* Control Bar: Categories & Search */}
       <div className="bg-[#131127] p-4 rounded-2xl border border-[#2a244d] space-y-3 shadow-md">
@@ -1065,6 +1136,74 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                     </div>
                   )}
 
+                  {/* Text Files List (.TXT / .MD) */}
+                  {note.attachments.filter((a) => a.type === 'text').length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-purple-300 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Documenti di Testo ({note.attachments.filter((a) => a.type === 'text').length})</span>
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {note.attachments
+                          .filter((a) => a.type === 'text')
+                          .map((txt) => (
+                            <div
+                              key={txt.id}
+                              className="bg-[#181236] border border-sky-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-sm"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-sky-950/80 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
+                                  <FileText className="w-4 h-4" />
+                                </div>
+                                <div className="truncate">
+                                  <p className="text-xs font-medium text-purple-100 truncate" title={txt.name}>
+                                    {txt.name}
+                                  </p>
+                                  <p className="text-[10px] text-purple-400">{txt.size || 'Testo .txt'}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewTextModal({ name: txt.name, content: txt.textContent || '' })}
+                                  className="p-1.5 rounded-lg bg-purple-900/60 hover:bg-purple-800 text-amber-300 hover:text-white transition text-xs flex items-center gap-1"
+                                  title="Leggi testo del file"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] hidden sm:inline">Leggi</span>
+                                </button>
+
+                                {onSendToChat && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const prompt = `[Lettura Intelligente - Allegato "${txt.name}" dalla nota "${note.title}"]\n\nCONTENUTO:\n"""\n${txt.textContent || ''}\n"""\n\nCara Guida Oracolare, analizza questo testo allegato offrendomi sintesi, decodifica simbolica e indicazioni per Maria Teresa. ✨`;
+                                      onSendToChat(prompt);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 transition text-xs flex items-center gap-1"
+                                    title="Analizza allegato con l'Oracolo"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                    <span className="text-[10px] hidden sm:inline">Oracolo</span>
+                                  </button>
+                                )}
+
+                                <a
+                                  href={txt.dataUrl}
+                                  download={txt.name}
+                                  className="p-1.5 rounded-lg bg-[#2a244d] hover:bg-purple-700 text-purple-200 hover:text-white transition text-xs flex items-center gap-1"
+                                  title="Scarica file di testo"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* PDFs List */}
                   {note.attachments.filter((a) => a.type === 'pdf').length > 0 && (
                     <div className="space-y-1.5">
@@ -1150,11 +1289,11 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                   {/* Direct Add Attachment Button to this Card */}
                   <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#1d1138] hover:bg-purple-900/40 text-purple-300 hover:text-amber-300 border border-[#2a244d] text-xs font-medium cursor-pointer transition">
                     <Paperclip className="w-3 h-3 text-amber-400" />
-                    <span>+ Allega PDF / Foto</span>
+                    <span>+ Allega PDF / Foto / .TXT</span>
                     <input
                       type="file"
                       multiple
-                      accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
+                      accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,text/plain,.txt,.md,.json"
                       onChange={(e) => handleDirectCardFileUpload(note.id, e)}
                       className="hidden"
                     />
@@ -1490,7 +1629,7 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                     <input
                       type="file"
                       multiple
-                      accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
+                      accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,text/plain,.txt,.md,.json"
                       onChange={handleFileUpload}
                       className="hidden"
                     />
@@ -1508,6 +1647,8 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                         <div className="flex items-center gap-2 min-w-0">
                           {att.type === 'pdf' ? (
                             <FileText className="w-4 h-4 text-rose-400 shrink-0" />
+                          ) : att.type === 'text' ? (
+                            <FileText className="w-4 h-4 text-sky-400 shrink-0" />
                           ) : (
                             <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />
                           )}
@@ -1530,7 +1671,7 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                   </div>
                 ) : (
                   <p className="text-[11px] text-purple-300/60 font-light italic">
-                    Puoi allegare referti, schede astrologiche in PDF, fotografie di rituali o carte dei tarocchi estratte.
+                    Puoi allegare referti, schede astrologiche in PDF, fotografie di rituali o file di testo (.txt).
                   </p>
                 )}
               </div>
@@ -1543,6 +1684,61 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
                 {editingNote ? 'Salva Modifiche' : 'Salva nel Diario'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- TEXT FILE PREVIEW MODAL --- */}
+      {previewTextModal && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-[#131127] border border-sky-400/60 rounded-3xl max-w-3xl w-full h-[80vh] flex flex-col shadow-2xl relative overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-[#2a244d] flex items-center justify-between gap-3 bg-[#181236]">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-5 h-5 text-sky-400 shrink-0" />
+                <h3 className="font-cinzel text-sm font-bold text-white truncate" title={previewTextModal.name}>
+                  {previewTextModal.name}
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {onSendToChat && (
+                  <button
+                    onClick={() => {
+                      const prompt = `[Lettura Intelligente - File "${previewTextModal.name}"]\n\nCONTENUTO:\n"""\n${previewTextModal.content}\n"""\n\nCara Guida Oracolare, analizza questo testo offrendomi una sintesi esoterica, interpretazione simbolica e consigli per il mio cammino. ✨`;
+                      onSendToChat(prompt);
+                      setPreviewTextModal(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 border border-amber-400/50 text-amber-300 font-bold text-xs transition flex items-center gap-1.5 shadow"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Invia ad Oracolo</span>
+                  </button>
+                )}
+
+                <a
+                  href={'data:text/plain;charset=utf-8,' + encodeURIComponent(previewTextModal.content)}
+                  download={previewTextModal.name}
+                  className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Scarica</span>
+                </a>
+
+                <button
+                  onClick={() => setPreviewTextModal(null)}
+                  className="p-1.5 rounded-xl text-purple-300 hover:text-white hover:bg-purple-900/40 transition"
+                  title="Chiudi visualizzatore"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content View */}
+            <div className="flex-grow w-full bg-[#0d0a1a] p-4 overflow-y-auto font-mono text-xs text-purple-100 whitespace-pre-wrap leading-relaxed">
+              {previewTextModal.content || 'Nessun contenuto disponibile in questo file.'}
+            </div>
           </div>
         </div>
       )}

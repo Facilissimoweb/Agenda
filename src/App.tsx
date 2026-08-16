@@ -390,12 +390,17 @@ export default function App() {
     setJournalNotes((prev) => prev.filter((n) => n.id !== id));
   };
 
-  // Send Journal Note to Oracle Chat
-  const handleSendJournalNoteToChat = (note: JournalNote) => {
-    const prompt = `[Riflessione dal mio Diario - "${note.title}" (${note.category})]\n${note.content}\n\nCara Guida Oracolare, cosa mi suggerisci e quali chiavi simboliche o rituali mi consigli su questa mia riflessione? ✨`;
+  // Send Journal Note or Smart Reading prompt to Oracle Chat
+  const handleSendJournalNoteToChat = (payload: JournalNote | string) => {
+    let prompt = '';
+    if (typeof payload === 'string') {
+      prompt = payload;
+    } else {
+      prompt = `[Riflessione dal mio Diario - "${payload.title}" (${payload.category})]\n${payload.content}\n\nCara Guida Oracolare, cosa mi suggerisci e quali chiavi simboliche o rituali mi consigli su questa mia riflessione? ✨`;
+    }
     setPendingChatPrompt(prompt);
     setActiveTab('chat');
-    showToast('🔮 Nota del diario trasferita alla Chat dell\'Oracolo!');
+    showToast('🔮 Testo & Analisi trasferiti alla Chat dell\'Oracolo!');
   };
 
   // Sanctuary Lock & Unlock Handlers
@@ -508,6 +513,7 @@ export default function App() {
                   onUpdateNote={handleUpdateNote}
                   onDeleteNote={handleDeleteNote}
                   onSendToChat={handleSendJournalNoteToChat}
+                  onOpenGoogleDriveModal={() => setIsGoogleDriveModalOpen(true)}
                   onShowToast={showToast}
                 />
               )}

@@ -77,9 +77,10 @@ export type JournalCategory = 'Tarocchi' | 'Astrologia' | 'Rituali' | 'Sogni' | 
 export interface JournalAttachment {
   id: string;
   name: string;
-  type: 'image' | 'pdf';
+  type: 'image' | 'pdf' | 'text';
   dataUrl: string;
   size?: string;
+  textContent?: string;
 }
 
 export interface JournalAudioRecording {
