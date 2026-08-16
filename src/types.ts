@@ -162,7 +162,7 @@ export interface GoogleDriveUser {
   uid: string;
   email: string | null;
   displayName: string | null;
-  photoURL: string | null;
+  photoURL?: string | null;
 }
 
 export interface DriveFile {

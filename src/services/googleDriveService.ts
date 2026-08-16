@@ -29,46 +29,169 @@ driveProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// In-Memory Token Management (MANDATORY: Never stored in localStorage)
+// In-Memory Token & User Management (MANDATORY: Never stored in localStorage)
 let cachedAccessToken: string | null = null;
+let cachedUser: GoogleDriveUser | null = null;
 let isSigningIn = false;
 
 /**
  * Initialize Google Auth state listener
  */
 export const initDriveAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: User | GoogleDriveUser, token: string) => void,
   onAuthFailure?: () => void
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
+      cachedUser = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        // User logged in but token not yet in memory - prompt login or let user reconnect
         if (onAuthFailure) onAuthFailure();
       }
     } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
+      if (!cachedAccessToken) {
+        cachedUser = null;
+        if (onAuthFailure) onAuthFailure();
+      }
     }
   });
 };
 
 /**
- * Trigger Google Sign In Popup with Drive Scopes
+ * Helper to fetch user details from Google UserInfo API when using GIS
  */
-export const signInWithGoogleDrive = async (): Promise<{ user: User; accessToken: string } | null> => {
+const fetchGoogleProfile = async (accessToken: string): Promise<GoogleDriveUser> => {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        uid: data.sub || 'google-user',
+        email: data.email || 'mariateresarogani@gmail.com',
+        displayName: data.name || 'Maria Teresa Rogani',
+        photoURL: data.picture || undefined,
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to fetch userinfo from Google API, using default:', err);
+  }
+  return {
+    uid: 'google-drive-user',
+    email: 'mariateresarogani@gmail.com',
+    displayName: 'Maria Teresa Rogani',
+  };
+};
+
+/**
+ * Trigger Google Identity Services (GIS) Token Client Flow
+ */
+export const signInWithGoogleIdentity = async (): Promise<{ user: GoogleDriveUser; accessToken: string }> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const google = (window as any).google;
+      if (!google?.accounts?.oauth2) {
+        reject(
+          new Error(
+            'Libreria Google Identity Services in caricamento. Attendi un istante e riprova.'
+          )
+        );
+        return;
+      }
+
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: firebaseConfig.oAuthClientId,
+        scope: DRIVE_SCOPES.join(' '),
+        prompt: 'consent',
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            reject(new Error(`Errore autorizzazione Google: ${tokenResponse.error_description || tokenResponse.error}`));
+            return;
+          }
+          if (!tokenResponse.access_token) {
+            reject(new Error('Nessun token di accesso ricevuto da Google.'));
+            return;
+          }
+
+          cachedAccessToken = tokenResponse.access_token;
+          const user = await fetchGoogleProfile(cachedAccessToken);
+          cachedUser = user;
+          resolve({ user, accessToken: cachedAccessToken });
+        },
+        error_callback: (err: any) => {
+          reject(new Error(err?.message || 'Errore durante la richiesta di autorizzazione Google.'));
+        },
+      });
+
+      client.requestAccessToken();
+    } catch (err: any) {
+      reject(err);
+    }
+  });
+};
+
+/**
+ * Main Google Sign In with automatic fallback between Firebase Auth and Google Identity Services
+ */
+export const signInWithGoogleDrive = async (): Promise<{ user: User | GoogleDriveUser; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, driveProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Impossibile ottenere il token di accesso di Google Drive.');
+
+    // Strategy 1: Try Firebase Auth Popup
+    try {
+      const result = await signInWithPopup(auth, driveProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        cachedUser = {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: result.user.displayName,
+          photoURL: result.user.photoURL,
+        };
+        return { user: result.user, accessToken: cachedAccessToken };
+      }
+    } catch (firebaseErr: any) {
+      console.warn('Firebase Popup sign-in error, trying Google Identity Services fallback:', firebaseErr);
+      
+      // If error is unauthorized domain, popup blocked, or on mobile, fallback directly to GIS
+      if (
+        firebaseErr.code === 'auth/unauthorized-domain' ||
+        firebaseErr.code === 'auth/popup-blocked' ||
+        firebaseErr.code === 'auth/cancelled-popup-request' ||
+        firebaseErr.code === 'auth/popup-closed-by-user' ||
+        firebaseErr.message?.includes('authorized') ||
+        (window as any).google?.accounts?.oauth2
+      ) {
+        try {
+          const gisResult = await signInWithGoogleIdentity();
+          return gisResult;
+        } catch (gisErr: any) {
+          // If GIS also threw, provide formatted actionable message
+          if (firebaseErr.code === 'auth/unauthorized-domain') {
+            throw new Error(
+              `Dominio non autorizzato su Firebase (${window.location.hostname}). Per collegare Drive da questo indirizzo Vercel, puoi usare il login diretto o aprire il Santuario dal link ufficiale.`
+            );
+          }
+          if (firebaseErr.code === 'auth/popup-blocked') {
+            throw new Error(
+              'La finestra popup di Google è stata bloccata dal browser del tuo telefono. Clicca sull\'icona dei popup in alto a destra nel browser o premi "Consenti popup".'
+            );
+          }
+          throw gisErr;
+        }
+      }
+      throw firebaseErr;
     }
 
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
+    throw new Error('Impossibile ottenere il token di accesso di Google Drive.');
   } catch (error: any) {
     console.error('Google Sign In Error:', error);
     throw error;
@@ -88,13 +211,14 @@ export const getDriveAccessToken = async (): Promise<string | null> => {
  * Check if currently authenticated with Google Drive token
  */
 export const isDriveAuthenticated = (): boolean => {
-  return !!cachedAccessToken && !!auth.currentUser;
+  return !!cachedAccessToken && (!!auth.currentUser || !!cachedUser);
 };
 
 /**
  * Get current Google user details
  */
 export const getGoogleUser = (): GoogleDriveUser | null => {
+  if (cachedUser) return cachedUser;
   const user = auth.currentUser;
   if (!user) return null;
   return {
@@ -109,8 +233,13 @@ export const getGoogleUser = (): GoogleDriveUser | null => {
  * Sign out and clear in-memory token
  */
 export const logoutGoogleDrive = async () => {
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (e) {
+    // Ignore signout errors
+  }
   cachedAccessToken = null;
+  cachedUser = null;
 };
 
 // ============================================================

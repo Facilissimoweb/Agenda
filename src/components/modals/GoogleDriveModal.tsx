@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   signInWithGoogleDrive, 
+  signInWithGoogleIdentity,
   logoutGoogleDrive, 
   listDriveFiles, 
   uploadFileToGoogleDrive, 
@@ -69,6 +70,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const [googleUser, setGoogleUser] = useState<GoogleDriveUser | null>(getGoogleUser());
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [hasToken, setHasToken] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Navigation & Tabs
   const [activeTab, setActiveTab] = useState<'files' | 'backup' | 'upload'>('files');
@@ -129,9 +131,10 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
     }
   }, [searchQuery, currentFolderId, mimeFilter]);
 
-  // Handle Google Sign-In
+  // Handle Google Sign-In (Combined Firebase + GIS)
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
+    setLoginError(null);
     try {
       const res = await signInWithGoogleDrive();
       if (res) {
@@ -142,12 +145,38 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           photoURL: res.user.photoURL,
         });
         setHasToken(true);
+        setLoginError(null);
         onShowToast(`🌙 Connesso con successo a Google Drive (${res.user.email || 'Maria Teresa'})!`);
         fetchFiles();
       }
     } catch (err: any) {
-      console.error(err);
-      onShowToast(`Errore di accesso: ${err.message || 'Accesso annullato'}`);
+      console.error('Google Login Error:', err);
+      const msg = err.message || 'Accesso non completato. Verifica i permessi popup del tuo browser.';
+      setLoginError(msg);
+      onShowToast(`Errore di accesso: ${msg}`);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Handle Direct Google Identity (GIS) Sign-In
+  const handleGoogleIdentityLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      const res = await signInWithGoogleIdentity();
+      if (res) {
+        setGoogleUser(res.user);
+        setHasToken(true);
+        setLoginError(null);
+        onShowToast(`🌙 Connesso con successo a Google Drive (${res.user.email || 'Maria Teresa'})!`);
+        fetchFiles();
+      }
+    } catch (err: any) {
+      console.error('Google Identity Login Error:', err);
+      const msg = err.message || 'Accesso diretto non riuscito.';
+      setLoginError(msg);
+      onShowToast(`Errore: ${msg}`);
     } finally {
       setIsLoggingIn(false);
     }
@@ -392,23 +421,35 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-3">
               <div className="flex items-center gap-2 text-xs text-purple-200">
                 <ShieldCheck className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <span>Accedi con il tuo account Google per gestire i file e i backup del Santuario in tempo reale con autorizzazione sicura.</span>
+                <span>Accedi con il tuo account Google per gestire i file e i backup in tempo reale.</span>
               </div>
 
-              {/* Official styled Sign In With Google Button */}
-              <button
-                onClick={handleGoogleLogin}
-                disabled={isLoggingIn}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs rounded-xl shadow-md hover:shadow-lg transition flex items-center gap-2.5 cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 48 48">
-                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                </svg>
-                <span>{isLoggingIn ? 'Accesso in corso...' : 'Accedi con Google'}</span>
-              </button>
+              {/* Official styled Sign In With Google Button & GIS Alternative */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={isLoggingIn}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2.5 cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </svg>
+                  <span>{isLoggingIn ? 'Accesso...' : 'Accedi con Google'}</span>
+                </button>
+
+                <button
+                  onClick={handleGoogleIdentityLogin}
+                  disabled={isLoggingIn}
+                  className="px-3 py-2 bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-amber-300 text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+                  title="Accesso diretto Google Identity alternativo per mobile"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">Accesso Diretto</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -527,25 +568,61 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
 
               {/* Files List / Empty States */}
               {!hasToken ? (
-                <div className="text-center py-12 px-4 bg-[#140f2e] border border-[#2a244d] rounded-2xl space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-purple-950/80 border border-amber-400/40 flex items-center justify-center mx-auto text-amber-300">
+                <div className="text-center py-10 px-4 bg-[#140f2e] border border-[#2a244d] rounded-2xl space-y-4 max-w-xl mx-auto">
+                  <div className="w-16 h-16 rounded-full bg-purple-950/80 border border-amber-400/40 flex items-center justify-center mx-auto text-amber-300 shadow-lg">
                     <Cloud className="w-8 h-8" />
                   </div>
-                  <div className="space-y-1 max-w-md mx-auto">
-                    <h3 className="font-cinzel font-bold text-base text-white">
+                  <div className="space-y-1.5 max-w-md mx-auto">
+                    <h3 className="font-cinzel font-bold text-base text-white gold-gradient-text">
                       Connetti il tuo Google Drive
                     </h3>
-                    <p className="text-xs text-purple-300">
-                      Per visualizzare i tuoi file, importare manuali nell'Oracolo ed eseguire il backup dei tuoi appunti, accedi con il tuo account Google.
+                    <p className="text-xs text-purple-200/90 leading-relaxed">
+                      Per visualizzare i tuoi file <span className="text-amber-300 font-mono">.txt</span>, importare manuali nell'Oracolo ed eseguire il backup sicuro del Santuario, autorizza l'accesso con il tuo account Google.
                     </p>
                   </div>
-                  <button
-                    onClick={handleGoogleLogin}
-                    disabled={isLoggingIn}
-                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition active:scale-95 cursor-pointer"
-                  >
-                    {isLoggingIn ? 'Accesso in corso...' : 'Connetti Google Drive Ora'}
-                  </button>
+
+                  {loginError && (
+                    <div className="p-3.5 bg-rose-950/50 border border-rose-500/40 rounded-xl text-left text-xs text-rose-200 space-y-1.5 animate-in fade-in">
+                      <div className="flex items-center gap-2 font-bold text-rose-300">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                        <span>Dettaglio Errore di Connessione</span>
+                      </div>
+                      <p className="text-[11px] text-rose-200/90 pl-6 break-words">
+                        {loginError}
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-rose-500/20 text-[11px] text-purple-200 pl-6 space-y-1">
+                        <p className="font-semibold text-amber-300">💡 Suggerimenti per smartphone o browser:</p>
+                        <p>1. Verifica che il browser non stia bloccando i popup (controlla l'icona a lucchetto o i 3 puntini in alto).</p>
+                        <p>2. Prova il pulsante <strong>Accesso Diretto Google</strong> qui sotto.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+                    <button
+                      onClick={handleGoogleLogin}
+                      disabled={isLoggingIn}
+                      className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                      </svg>
+                      <span>{isLoggingIn ? 'Accesso in corso...' : 'Accedi con Google'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleGoogleIdentityLogin}
+                      disabled={isLoggingIn}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-500/40 text-amber-300 font-semibold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      title="Usa il protocollo Google Identity Services alternativo"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Accesso Diretto (Mobile / Alternativo)</span>
+                    </button>
+                  </div>
                 </div>
               ) : isLoadingFiles ? (
                 <div className="text-center py-12 text-purple-300 space-y-2">
