@@ -6,7 +6,7 @@ import {
   isSpeechRecognitionSupported, 
   isSpeechSynthesisSupported 
 } from '../../utils/speech';
-import { transcribeAudioWithGroq, getStoredGroqApiKey } from '../../services/groqService';
+import { transcribeAudioWithGroq, correctAndRefineTextWithGroq, getStoredGroqApiKey } from '../../services/groqService';
 import { 
   BookMarked, 
   Plus, 
@@ -40,7 +40,8 @@ import {
   Key,
   BookOpen,
   Brain,
-  Cloud
+  Cloud,
+  Wand2
 } from 'lucide-react';
 import { SmartReadingAnalyzer } from './SmartReadingAnalyzer';
 
@@ -254,6 +255,7 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
   const [groqDictationSeconds, setGroqDictationSeconds] = useState(0);
   const [isGroqTranscribing, setIsGroqTranscribing] = useState(false);
   const [transcribingAudioNoteId, setTranscribingAudioNoteId] = useState<string | number | null>(null);
+  const [isCorrectingText, setIsCorrectingText] = useState(false);
   const groqMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const groqAudioChunksRef = useRef<Blob[]>([]);
   const groqDictationTimerRef = useRef<any>(null);
@@ -722,6 +724,29 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
       attachments: prev.attachments.filter((a) => a.id !== attId),
     }));
     onShowToast('Allegato rimosso.');
+  };
+
+  // --- AI TEXT CORRECTION & ENHANCEMENT ---
+  const handleCorrectTextWithAI = async () => {
+    if (!formData.content.trim()) {
+      onShowToast('Scrivi o detta prima del testo da correggere.');
+      return;
+    }
+
+    setIsCorrectingText(true);
+    try {
+      const res = await correctAndRefineTextWithGroq(formData.content);
+      if (res.success && res.text) {
+        setFormData((prev) => ({ ...prev, content: res.text }));
+        onShowToast('✨ Testo revisionato, corretto e formattato con Groq AI!');
+      } else {
+        onShowToast(`⚠️ ${res.error || 'Impossibile correggere il testo.'}`);
+      }
+    } catch (err: any) {
+      onShowToast(`Errore durante la correzione: ${err?.message || err}`);
+    } finally {
+      setIsCorrectingText(false);
+    }
   };
 
   // --- 4. SUBMIT FORM ---
@@ -1319,370 +1344,442 @@ export const DiarioView: React.FC<DiarioViewProps> = ({
         )}
       </div>
 
-      {/* --- ADD / EDIT NOTE MODAL --- */}
+      {/* --- ADD / EDIT NOTE MODAL (Clean Non-blocking Scroll & Sticky Action Bar) --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-[#131127] border border-amber-400/60 rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl relative space-y-4 my-8 max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => {
-                if (isDictating && speechRecognitionRef.current) speechRecognitionRef.current.stop();
-                if (isAudioRecording && mediaRecorderRef.current) mediaRecorderRef.current.stop();
-                setIsModalOpen(false);
-              }}
-              className="absolute top-4 right-4 text-purple-400 hover:text-white p-1 rounded-lg hover:bg-purple-900/40 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 border-b border-[#2a244d]/70 pb-3">
-              <span className="text-2xl">{formData.icon || '📓'}</span>
-              <div>
-                <h3 className="font-cinzel text-base font-bold text-white">
-                  {editingNote ? 'Modifica Nota Privata' : 'Nuova Nota nel Diario Segreto'}
-                </h3>
-                <p className="text-xs text-amber-300">
-                  Custodisci visioni, file PDF, registrazioni vocali e canalizzazioni
-                </p>
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="bg-[#131127] border border-amber-400/60 rounded-3xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[88vh] flex flex-col shadow-2xl relative overflow-hidden">
+            {/* Modal Header */}
+            <div className="shrink-0 p-4 sm:p-5 border-b border-[#2a244d]/70 flex items-center justify-between bg-[#161230]">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{formData.icon || '📓'}</span>
+                <div>
+                  <h3 className="font-cinzel text-base font-bold text-white">
+                    {editingNote ? 'Modifica Nota Privata' : 'Nuova Nota nel Diario Segreto'}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-amber-300">
+                    Custodisci visioni, file PDF, registrazioni vocali e canalizzazioni
+                  </p>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDictating && speechRecognitionRef.current) speechRecognitionRef.current.stop();
+                  if (isAudioRecording && mediaRecorderRef.current) mediaRecorderRef.current.stop();
+                  if (isGroqDictating && groqMediaRecorderRef.current) groqMediaRecorderRef.current.stop();
+                  setIsModalOpen(false);
+                }}
+                className="text-purple-400 hover:text-white p-2 rounded-xl hover:bg-purple-900/40 transition cursor-pointer"
+                title="Chiudi"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              {/* Title Input */}
-              <div>
-                <label className="block text-purple-300 mb-1 font-medium">Titolo della Nota *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="Es. Visioni sotto la Luna Piena, Consulto speciale..."
-                  className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-400 text-xs"
-                />
-              </div>
-
-              {/* Category & Icon */}
-              <div className="grid grid-cols-2 gap-3">
+            {/* Modal Form */}
+            <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              {/* Scrollable Body */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 text-xs">
+                {/* Title Input */}
                 <div>
-                  <label className="block text-purple-300 mb-1 font-medium">Categoria</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => handleCategorySelect(e.target.value as JournalCategory)}
-                    className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-400 text-xs"
-                  >
-                    <option value="Personale">Personale</option>
-                    <option value="Tarocchi">Tarocchi</option>
-                    <option value="Astrologia">Astrologia</option>
-                    <option value="Rituali">Rituali</option>
-                    <option value="Sogni">Sogni</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-purple-300 mb-1 font-medium">Simbolo / Emoji</label>
+                  <label className="block text-purple-300 mb-1 font-medium">Titolo della Nota *</label>
                   <input
                     type="text"
-                    value={formData.icon}
-                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                    placeholder="Es. 🔮, 🕯️, 🌙, 📝"
+                    required
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="Es. Visioni sotto la Luna Piena, Consulto speciale..."
                     className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-400 text-xs"
                   />
                 </div>
-              </div>
 
-              {/* Pin Checkbox */}
-              <div className="flex items-center gap-2 pt-0.5">
-                <input
-                  type="checkbox"
-                  id="pin-checkbox"
-                  checked={formData.pinned}
-                  onChange={(e) => setFormData({ ...formData, pinned: e.target.checked })}
-                  className="w-4 h-4 rounded text-amber-400 bg-[#1d1138] border-[#2a244d] focus:ring-amber-400"
-                />
-                <label htmlFor="pin-checkbox" className="text-purple-200 cursor-pointer text-xs">
-                  Fissa questa nota in cima al diario
-                </label>
-              </div>
-
-              {/* Content Textarea with Groq Whisper & Live Dictation Buttons */}
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <label className="text-purple-300 font-medium">Contenuto della Nota *</label>
-                    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-400/10 text-amber-300 border border-amber-400/20 font-mono">
-                      <Cpu className="w-2.5 h-2.5" /> Groq Whisper AI
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {/* PRIMARY: Groq Whisper Speech to Text */}
-                    {!isGroqDictating ? (
-                      <button
-                        type="button"
-                        onClick={startGroqWhisperDictation}
-                        disabled={isGroqTranscribing || isDictating}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-md shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
-                        title="Dettatura vocale ad altissima precisione in italiano tramite Groq Whisper AI"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Dettatura Groq Whisper AI</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={stopAndTranscribeGroqWhisper}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 transition animate-pulse cursor-pointer"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Ferma & Trascrivi AI</span>
-                      </button>
-                    )}
-
-                    {/* SECONDARY: Instant Browser STT Toggle */}
-                    <button
-                      type="button"
-                      onClick={toggleDictation}
-                      disabled={isGroqDictating || isGroqTranscribing}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
-                        isDictating
-                          ? 'bg-rose-500 text-white animate-pulse shadow-md'
-                          : 'bg-[#1d1138] hover:bg-[#281b4d] text-purple-300 border border-purple-500/30'
-                      }`}
-                      title="Dettatura istantanea streaming del browser"
+                {/* Category & Icon */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-purple-300 mb-1 font-medium">Categoria</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => handleCategorySelect(e.target.value as JournalCategory)}
+                      className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-400 text-xs"
                     >
-                      {isDictating ? (
-                        <>
-                          <MicOff className="w-3 h-3 text-white" />
-                          <span>Stop Browser STT</span>
-                        </>
-                      ) : (
-                        <>
-                          <Mic className="w-3 h-3 text-purple-400" />
-                          <span>Browser STT</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Groq Whisper Active Recording Bar */}
-                {isGroqDictating && (
-                  <div className="bg-gradient-to-r from-amber-950/80 via-[#2a1b4d] to-purple-950/80 border border-amber-500/50 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg animate-pulse">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-400 text-amber-300 shrink-0">
-                        <Mic className="w-4 h-4 animate-bounce" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-                          <span className="font-mono font-bold text-amber-300 text-xs">
-                            ASCOLTO GROQ WHISPER: {Math.floor(groqDictationSeconds / 60).toString().padStart(2, '0')}:{(groqDictationSeconds % 60).toString().padStart(2, '0')}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-purple-200">
-                          Parla liberamente in italiano. Quando finisci, clicca su "Trascrivi Ora con Groq".
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={stopAndTranscribeGroqWhisper}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Trascrivi Ora con Groq</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelGroqWhisperDictation}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
-                        title="Annulla dettatura"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Groq Whisper Transcribing Loader */}
-                {isGroqTranscribing && (
-                  <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-xs text-amber-200 flex items-center gap-2.5 animate-pulse">
-                    <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-                    <span>
-                      🧠 <strong>Groq Whisper AI</strong> sta elaborando la tua voce e trascrivendo con grammatica e punteggiatura esatta...
-                    </span>
-                  </div>
-                )}
-
-                {/* Browser STT Active State */}
-                {isDictating && (
-                  <div className="bg-rose-950/40 border border-rose-500/40 rounded-xl p-2.5 text-[11px] text-rose-200 flex items-center gap-2 animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
-                    <span>Microfono browser attivo: trascrizione in corso...</span>
-                  </div>
-                )}
-
-                <textarea
-                  rows={5}
-                  required
-                  value={formData.content}
-                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  placeholder="Scrivi o detta qui i dettagli del rito, le carte estratte, i simboli del sogno o le tue riflessioni interiori..."
-                  className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-light leading-relaxed"
-                />
-              </div>
-
-              {/* --- AUDIO VOICE RECORDER SECTION --- */}
-              <div className="bg-[#181236]/80 border border-[#2a244d] rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Music className="w-4 h-4 text-amber-400" />
-                    <span className="font-semibold text-purple-100 text-xs">Registrazione Vocale Audio</span>
+                      <option value="Personale">Personale</option>
+                      <option value="Tarocchi">Tarocchi</option>
+                      <option value="Astrologia">Astrologia</option>
+                      <option value="Rituali">Rituali</option>
+                      <option value="Sogni">Sogni</option>
+                    </select>
                   </div>
 
-                  {!formData.audioRecording && !isAudioRecording && (
-                    <button
-                      type="button"
-                      onClick={startAudioRecording}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-amber-300 border border-amber-400/30 text-xs font-medium transition"
-                    >
-                      <Mic className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Registra Audio</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Active Recording State */}
-                {isAudioRecording && (
-                  <div className="bg-rose-950/60 border border-rose-500/60 rounded-xl p-3 flex items-center justify-between gap-3 animate-pulse">
-                    <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-                      <span className="font-mono font-bold text-rose-300 text-xs">
-                        REGISTRAZIONE IN CORSO: {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={stopAudioRecording}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition flex items-center gap-1"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Salva Audio</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={cancelAudioRecording}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
-                        title="Annulla registrazione"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Recorded Audio Player & Options */}
-                {formData.audioRecording && (
-                  <div className="space-y-2">
-                    <AudioPlayerWidget
-                      audioUrl={formData.audioRecording.dataUrl}
-                      duration={formData.audioRecording.duration}
-                      label="Nota Vocale Allegata"
-                      onTranscribe={() => handleTranscribeExistingAudio(formData.audioRecording!.dataUrl)}
-                      isTranscribing={transcribingAudioNoteId === 'modal'}
-                      onDelete={() => {
-                        setFormData({ ...formData, audioRecording: undefined });
-                        onShowToast('Registrazione vocale rimossa.');
-                      }}
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={startAudioRecording}
-                        className="text-[11px] text-amber-300/80 hover:text-amber-200 flex items-center gap-1"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Sovrascrivi / Registra di nuovo</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* --- FILE ATTACHMENTS (PDF & IMAGES) SECTION --- */}
-              <div className="bg-[#181236]/80 border border-[#2a244d] rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-amber-400" />
-                    <span className="font-semibold text-purple-100 text-xs">
-                      Allegati: Immagini & Documenti PDF
-                    </span>
-                  </div>
-
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-amber-300 border border-amber-400/30 text-xs font-medium cursor-pointer transition">
-                    <Plus className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Carica PDF o Foto</span>
+                  <div>
+                    <label className="block text-purple-300 mb-1 font-medium">Simbolo / Emoji</label>
                     <input
-                      type="file"
-                      multiple
-                      accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,text/plain,.txt,.md,.json"
-                      onChange={handleFileUpload}
-                      className="hidden"
+                      type="text"
+                      value={formData.icon}
+                      onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                      placeholder="Es. 🔮, 🕯️, 🌙, 📝"
+                      className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-amber-400 text-xs"
                     />
+                  </div>
+                </div>
+
+                {/* Pin Checkbox */}
+                <div className="flex items-center gap-2 pt-0.5">
+                  <input
+                    type="checkbox"
+                    id="pin-checkbox"
+                    checked={formData.pinned}
+                    onChange={(e) => setFormData({ ...formData, pinned: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-400 bg-[#1d1138] border-[#2a244d] focus:ring-amber-400"
+                  />
+                  <label htmlFor="pin-checkbox" className="text-purple-200 cursor-pointer text-xs">
+                    Fissa questa nota in cima al diario
                   </label>
                 </div>
 
-                {/* Uploaded Files Preview List */}
-                {formData.attachments.length > 0 ? (
-                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                    {formData.attachments.map((att) => (
-                      <div
-                        key={att.id}
-                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#131127] border border-purple-500/20 text-xs"
+                {/* Content Textarea with Groq Whisper & AI Correction Buttons */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-purple-300 font-medium">Contenuto della Nota *</label>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-400/10 text-amber-300 border border-amber-400/20 font-mono">
+                        <Cpu className="w-2.5 h-2.5" /> Groq AI Whisper
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* AI Correction Button In-Editor */}
+                      <button
+                        type="button"
+                        onClick={handleCorrectTextWithAI}
+                        disabled={isCorrectingText || !formData.content.trim()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-900/70 hover:bg-purple-800 border border-purple-400/30 text-amber-300 hover:text-amber-200 transition disabled:opacity-50 cursor-pointer"
+                        title="Correggi refusi, grammatica e punteggiatura con Groq AI"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {att.type === 'pdf' ? (
-                            <FileText className="w-4 h-4 text-rose-400 shrink-0" />
-                          ) : att.type === 'text' ? (
-                            <FileText className="w-4 h-4 text-sky-400 shrink-0" />
-                          ) : (
-                            <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                          )}
-                          <span className="text-purple-100 truncate" title={att.name}>
-                            {att.name}
-                          </span>
-                          <span className="text-[10px] text-purple-400 shrink-0">({att.size})</span>
+                        {isCorrectingText ? (
+                          <Loader2 className="w-3 h-3 text-amber-300 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-3 h-3 text-amber-400" />
+                        )}
+                        <span>Correggi con AI</span>
+                      </button>
+
+                      {/* PRIMARY: Groq Whisper Speech to Text */}
+                      {!isGroqDictating ? (
+                        <button
+                          type="button"
+                          onClick={startGroqWhisperDictation}
+                          disabled={isGroqTranscribing || isDictating}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-md shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                          title="Dettatura vocale ad altissima precisione in italiano tramite Groq Whisper AI"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Dettatura Groq Whisper AI</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={stopAndTranscribeGroqWhisper}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 transition animate-pulse cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Ferma & Trascrivi AI</span>
+                        </button>
+                      )}
+
+                      {/* SECONDARY: Instant Browser STT Toggle */}
+                      <button
+                        type="button"
+                        onClick={toggleDictation}
+                        disabled={isGroqDictating || isGroqTranscribing}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer ${
+                          isDictating
+                            ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                            : 'bg-[#1d1138] hover:bg-[#281b4d] text-purple-300 border border-purple-500/30'
+                        }`}
+                        title="Dettatura istantanea streaming del browser"
+                      >
+                        {isDictating ? (
+                          <>
+                            <MicOff className="w-3 h-3 text-white" />
+                            <span>Stop STT</span>
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="w-3 h-3 text-purple-400" />
+                            <span>Browser STT</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Groq Whisper Active Recording Bar */}
+                  {isGroqDictating && (
+                    <div className="bg-gradient-to-r from-amber-950/80 via-[#2a1b4d] to-purple-950/80 border border-amber-500/50 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-400 text-amber-300 shrink-0">
+                          <Mic className="w-4 h-4 animate-bounce" />
                         </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                            <span className="font-mono font-bold text-amber-300 text-xs">
+                              ASCOLTO GROQ WHISPER: {Math.floor(groqDictationSeconds / 60).toString().padStart(2, '0')}:{(groqDictationSeconds % 60).toString().padStart(2, '0')}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-purple-200">
+                            Parla liberamente in italiano. Quando finisci, clicca su "Trascrivi Ora con Groq".
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={stopAndTranscribeGroqWhisper}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Trascrivi Ora con Groq</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelGroqWhisperDictation}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+                          title="Annulla dettatura"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Groq Whisper Transcribing Loader */}
+                  {isGroqTranscribing && (
+                    <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 text-xs text-amber-200 flex items-center gap-2.5 animate-pulse">
+                      <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                      <span>
+                        🧠 <strong>Groq Whisper AI</strong> sta elaborando la tua voce e trascrivendo con grammatica e punteggiatura esatta...
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Browser STT Active State */}
+                  {isDictating && (
+                    <div className="bg-rose-950/40 border border-rose-500/40 rounded-xl p-2.5 text-[11px] text-rose-200 flex items-center gap-2 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                      <span>Microfono browser attivo: trascrizione in corso...</span>
+                    </div>
+                  )}
+
+                  {/* Correction Loader */}
+                  {isCorrectingText && (
+                    <div className="bg-purple-950/50 border border-purple-500/40 rounded-xl p-2.5 text-[11px] text-purple-200 flex items-center gap-2 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                      <span>✨ Groq AI sta correggendo grammatica, accenti e punteggiatura...</span>
+                    </div>
+                  )}
+
+                  <textarea
+                    rows={5}
+                    required
+                    value={formData.content}
+                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                    placeholder="Scrivi o detta qui i dettagli del rito, le carte estratte, i simboli del sogno o le tue riflessioni interiori..."
+                    className="w-full bg-[#1d1138] border border-[#2a244d] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-400 text-xs font-light leading-relaxed"
+                  />
+                </div>
+
+                {/* --- AUDIO VOICE RECORDER SECTION --- */}
+                <div className="bg-[#181236]/80 border border-[#2a244d] rounded-2xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Music className="w-4 h-4 text-amber-400" />
+                      <span className="font-semibold text-purple-100 text-xs">Registrazione Vocale Audio</span>
+                    </div>
+
+                    {!formData.audioRecording && !isAudioRecording && (
+                      <button
+                        type="button"
+                        onClick={startAudioRecording}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-amber-300 border border-amber-400/30 text-xs font-medium transition cursor-pointer"
+                      >
+                        <Mic className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Registra Audio</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Active Recording State */}
+                  {isAudioRecording && (
+                    <div className="bg-rose-950/60 border border-rose-500/60 rounded-xl p-3 flex items-center justify-between gap-3 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+                        <span className="font-mono font-bold text-rose-300 text-xs">
+                          REGISTRAZIONE IN CORSO: {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={stopAudioRecording}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Salva Audio</span>
+                        </button>
 
                         <button
                           type="button"
-                          onClick={() => handleRemoveAttachment(att.id)}
-                          className="text-rose-400 hover:text-rose-300 p-1 rounded hover:bg-rose-950/40 transition shrink-0"
-                          title="Rimuovi allegato"
+                          onClick={cancelAudioRecording}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                          title="Annulla registrazione"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  {/* Recorded Audio Player & Options */}
+                  {formData.audioRecording && (
+                    <div className="space-y-2">
+                      <AudioPlayerWidget
+                        audioUrl={formData.audioRecording.dataUrl}
+                        duration={formData.audioRecording.duration}
+                        label="Nota Vocale Allegata"
+                        onTranscribe={() => handleTranscribeExistingAudio(formData.audioRecording!.dataUrl)}
+                        isTranscribing={transcribingAudioNoteId === 'modal'}
+                        onDelete={() => {
+                          setFormData({ ...formData, audioRecording: undefined });
+                          onShowToast('Registrazione vocale rimossa.');
+                        }}
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={startAudioRecording}
+                          className="text-[11px] text-amber-300/80 hover:text-amber-200 flex items-center gap-1 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Sovrascrivi / Registra di nuovo</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* --- FILE ATTACHMENTS (PDF & IMAGES) SECTION --- */}
+                <div className="bg-[#181236]/80 border border-[#2a244d] rounded-2xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="w-4 h-4 text-amber-400" />
+                      <span className="font-semibold text-purple-100 text-xs">
+                        Allegati: Immagini & Documenti PDF
+                      </span>
+                    </div>
+
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-900/80 hover:bg-purple-800 text-amber-300 border border-amber-400/30 text-xs font-medium cursor-pointer transition">
+                      <Plus className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Carica PDF o Foto</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,text/plain,.txt,.md,.json"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
-                ) : (
-                  <p className="text-[11px] text-purple-300/60 font-light italic">
-                    Puoi allegare referti, schede astrologiche in PDF, fotografie di rituali o file di testo (.txt).
-                  </p>
-                )}
+
+                  {/* Uploaded Files Preview List */}
+                  {formData.attachments.length > 0 ? (
+                    <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                      {formData.attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#131127] border border-purple-500/20 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {att.type === 'pdf' ? (
+                              <FileText className="w-4 h-4 text-rose-400 shrink-0" />
+                            ) : att.type === 'text' ? (
+                              <FileText className="w-4 h-4 text-sky-400 shrink-0" />
+                            ) : (
+                              <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                            )}
+                            <span className="text-purple-100 truncate" title={att.name}>
+                              {att.name}
+                            </span>
+                            <span className="text-[10px] text-purple-400 shrink-0">({att.size})</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachment(att.id)}
+                            className="text-rose-400 hover:text-rose-300 p-1 rounded hover:bg-rose-950/40 transition shrink-0 cursor-pointer"
+                            title="Rimuovi allegato"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-purple-300/60 font-light italic">
+                      Puoi allegare referti, schede astrologiche in PDF, fotografie di rituali o file di testo (.txt).
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold uppercase tracking-wider rounded-xl transition shadow-lg shadow-amber-500/20 text-xs active:scale-95 cursor-pointer mt-2"
-              >
-                {editingNote ? 'Salva Modifiche' : 'Salva nel Diario'}
-              </button>
+              {/* 3. Sticky Action Footer (Always Visible & Reachable) */}
+              <div className="shrink-0 p-3 sm:p-4 border-t border-[#2a244d]/80 bg-[#161230]/95 backdrop-blur flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDictating && speechRecognitionRef.current) speechRecognitionRef.current.stop();
+                      if (isAudioRecording && mediaRecorderRef.current) mediaRecorderRef.current.stop();
+                      if (isGroqDictating && groqMediaRecorderRef.current) groqMediaRecorderRef.current.stop();
+                      setIsModalOpen(false);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#1d1138] hover:bg-[#251845] border border-[#2a244d] text-purple-300 hover:text-white text-xs transition cursor-pointer"
+                  >
+                    Annulla
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCorrectTextWithAI}
+                    disabled={isCorrectingText || !formData.content.trim()}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-900/60 hover:bg-purple-800/80 border border-purple-400/40 text-amber-200 hover:text-amber-100 text-xs font-semibold shadow-md transition disabled:opacity-50 cursor-pointer"
+                    title="Correggi ortografia, punteggiatura e sintassi con Groq AI"
+                  >
+                    {isCorrectingText ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                        <span>Correzione...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Correggi con AI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold uppercase tracking-wider rounded-xl transition shadow-lg shadow-amber-500/20 text-xs active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingNote ? 'Salva Modifiche' : 'Salva nel Diario'}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>

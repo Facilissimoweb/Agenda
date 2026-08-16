@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Appointment, AppointmentStatus, AppointmentType } from '../../types';
+import { VisualCalendar } from '../VisualCalendar';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -13,7 +14,8 @@ import {
   Sparkles, 
   Filter,
   Phone,
-  FileText
+  FileText,
+  CalendarDays
 } from 'lucide-react';
 
 interface AgendaViewProps {
@@ -31,6 +33,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   onDeleteAppointment,
   onShowToast,
 }) => {
+  const [showCalendar, setShowCalendar] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<string>('tutti');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -56,11 +59,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     status: 'Confermato',
   });
 
-  const openNewModal = () => {
+  const openNewModal = (initialDate?: string) => {
     setEditingAppt(null);
     setFormData({
       name: '',
-      date: new Date().toISOString().split('T')[0],
+      date: initialDate || selectedDate || new Date().toISOString().split('T')[0],
       time: '15:00',
       type: 'Lettura Tarocchi',
       phone: '',
@@ -135,9 +138,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   });
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-[clamp(12px,2vh,20px)]">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2a244d]/70 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2a244d]/70 pb-3 sm:pb-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold font-cinzel gold-gradient-text flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-amber-400" />
@@ -148,17 +151,46 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={openNewModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold transition shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuovo Appuntamento</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* Calendar Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowCalendar(!showCalendar)}
+            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
+              showCalendar
+                ? 'bg-purple-950/80 border-amber-400/50 text-amber-300 shadow-sm'
+                : 'bg-[#1b153f] border-[#2a244d] text-purple-200 hover:text-white'
+            }`}
+            title="Mostra / Nascondi Calendario Visivo"
+          >
+            <CalendarDays className="w-4 h-4 text-amber-400" />
+            <span>{showCalendar ? 'Nascondi Mese' : 'Mostra Mese'}</span>
+          </button>
+
+          {/* New Appointment Button */}
+          <button
+            type="button"
+            onClick={() => openNewModal()}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold transition shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuovo Appuntamento</span>
+          </button>
+        </div>
       </div>
 
+      {/* Visual Calendar Component */}
+      {showCalendar && (
+        <VisualCalendar
+          appointments={appointments}
+          selectedDate={selectedDate}
+          onSelectDate={(d) => setSelectedDate(d)}
+          onQuickAddForDate={(d) => openNewModal(d)}
+        />
+      )}
+
       {/* Control Bar: Filters, Date Picker, Search */}
-      <div className="bg-[#131127] p-4 rounded-2xl border border-[#2a244d] space-y-3 shadow-md">
+      <div className="bg-[#131127] p-[clamp(10px,2vw,16px)] rounded-2xl border border-[#2a244d] space-y-3 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Quick Filter Buttons */}
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -172,7 +204,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setFilterType(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition active:scale-95 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition active:scale-95 cursor-pointer ${
                   filterType === tab.id
                     ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20'
                     : 'bg-[#1d1138]/60 text-purple-200 hover:text-amber-300 hover:bg-[#1d1138]'
@@ -194,7 +226,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             {selectedDate && (
               <button
                 onClick={() => setSelectedDate('')}
-                className="text-[11px] text-amber-300 hover:text-white px-2 py-1 bg-purple-950 rounded-lg border border-purple-800"
+                className="text-[11px] text-amber-300 hover:text-white px-2.5 py-1.5 bg-purple-950 rounded-lg border border-purple-800 cursor-pointer whitespace-nowrap"
               >
                 Resetta Data
               </button>
@@ -215,7 +247,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-2.5 text-purple-400 hover:text-white text-xs"
+              className="absolute right-3 top-2.5 text-purple-400 hover:text-white text-xs cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>

@@ -434,7 +434,7 @@ export default function App() {
       />
 
       {/* Main App Container */}
-      <div className="relative z-10 flex flex-col min-h-screen max-w-6xl mx-auto px-3 sm:px-6">
+      <div className="relative z-10 flex flex-col min-h-[100dvh] max-w-6xl mx-auto px-[clamp(8px,2.8vw,24px)] pb-[calc(clamp(60px,10vh,80px)+env(safe-area-inset-bottom,0px))] sm:pb-8">
         {/* Top Header */}
         <Header
           activeTab={activeTab}
@@ -451,7 +451,7 @@ export default function App() {
         />
 
         {/* Dynamic Views with Fade & Slide Animation */}
-        <main className="flex-grow py-5 sm:py-7">
+        <main className="flex-grow py-[clamp(8px,1.8vh,20px)]">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

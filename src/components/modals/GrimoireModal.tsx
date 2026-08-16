@@ -161,75 +161,75 @@ export const GrimoireModal: React.FC<GrimoireModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-      <div className="bg-[#110e24] border border-[#2a244d] w-full max-w-4xl h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-[clamp(6px,2vw,16px)] bg-black/85 backdrop-blur-md animate-in fade-in">
+      <div className="bg-[#110e24] border border-[#2a244d] w-full max-w-4xl max-h-[min(90dvh,88vh)] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100">
         
         {/* Header - Mobile friendly, No overlap */}
-        <div className="px-3.5 py-3 sm:p-4 border-b border-[#2a244d] bg-[#161233] flex items-center justify-between gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-lg text-amber-300 shadow-md flex-shrink-0">
+        <div className="px-[clamp(10px,2.8vw,18px)] py-[clamp(8px,1.5vh,14px)] border-b border-[#2a244d] bg-[#161233] flex items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-sm sm:text-lg text-amber-300 shadow-md flex-shrink-0">
               📚
             </div>
             <div className="min-w-0">
               <h2 className="text-xs sm:text-base font-cinzel font-bold text-white gold-gradient-text truncate">
-                Biblioteca Sacra & Grimori AI
+                Biblioteca Sacra
               </h2>
-              <p className="text-[10px] sm:text-xs text-purple-300/80 truncate">
-                Testi usati dall'Oracolo per consulti e citazioni
+              <p className="text-[9px] sm:text-xs text-purple-300/80 truncate">
+                Testi per l'Oracolo
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/90 border border-amber-400/40 text-amber-300 whitespace-nowrap">
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-bold bg-purple-950/90 border border-amber-400/40 text-amber-300 whitespace-nowrap">
               {activeBooksCount}/{books.length} attivi
             </span>
             <button
               onClick={onClose}
-              className="p-1.5 text-purple-400 hover:text-white hover:bg-purple-900/40 rounded-xl transition cursor-pointer"
+              className="p-1 sm:p-1.5 text-purple-400 hover:text-white hover:bg-purple-900/40 rounded-xl transition cursor-pointer"
               title="Chiudi"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
         {/* Navigation Tabs - Clean, no wrapping */}
-        <div className="px-2 sm:px-4 pt-1.5 border-b border-[#2a244d] bg-[#130f2b] flex items-center justify-between gap-1 overflow-x-auto flex-shrink-0 scrollbar-none">
-          <div className="flex items-center gap-1 text-xs">
+        <div className="px-[clamp(8px,2vw,16px)] pt-1 border-b border-[#2a244d] bg-[#130f2b] flex items-center justify-between gap-1 overflow-x-auto flex-shrink-0 scrollbar-none">
+          <div className="flex items-center gap-0.5 sm:gap-1 text-xs">
             <button
               onClick={() => { setActiveTab('library'); setSelectedBook(null); }}
-              className={`px-3 py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1 whitespace-nowrap cursor-pointer text-[10px] sm:text-xs ${
                 activeTab === 'library'
                   ? 'border-amber-400 text-amber-300 bg-purple-950/60 font-semibold'
                   : 'border-transparent text-purple-300 hover:text-white'
               }`}
             >
-              <BookMarked className="w-3.5 h-3.5" />
+              <BookMarked className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               <span>Manuali ({books.length})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('add')}
-              className={`px-3 py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1 whitespace-nowrap cursor-pointer text-[10px] sm:text-xs ${
                 activeTab === 'add'
                   ? 'border-amber-400 text-amber-300 bg-purple-950/60 font-semibold'
                   : 'border-transparent text-purple-300 hover:text-white'
               }`}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               <span>+ Aggiungi Testo</span>
             </button>
 
             <button
               onClick={() => setActiveTab('guide')}
-              className={`px-3 py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-t-xl font-medium border-b-2 transition flex items-center gap-1 whitespace-nowrap cursor-pointer text-[10px] sm:text-xs ${
                 activeTab === 'guide'
                   ? 'border-amber-400 text-amber-300 bg-purple-950/60 font-semibold'
                   : 'border-transparent text-purple-300 hover:text-white'
               }`}
             >
-              <HelpCircle className="w-3.5 h-3.5" />
+              <HelpCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               <span>Guida</span>
             </button>
           </div>
@@ -245,7 +245,7 @@ export const GrimoireModal: React.FC<GrimoireModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 pb-20 sm:pb-6">
+        <div className="flex-1 overflow-y-auto p-[clamp(10px,2.8vw,20px)] space-y-[clamp(10px,1.8vh,16px)]">
           {/* TAB 1: LIBRARY LIST OR BOOK DETAIL */}
           {activeTab === 'library' && (
             <div>

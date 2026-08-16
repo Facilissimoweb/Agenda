@@ -1,16 +1,43 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --fluid-px: clamp(0.75rem, 2.8vw, 1.5rem);
+    --fluid-py: clamp(0.6rem, 1.8vh, 1.25rem);
+    --fluid-gap: clamp(0.5rem, 2vw, 1.25rem);
+  }
+
+  html, body {
+    min-height: 100%;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
   body {
     font-family: 'Inter', sans-serif;
     background-color: #0a0915;
     color: #e2e8f0;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   h1, h2, h3, h4, .font-cinzel {
     font-family: 'Cinzel', serif;
   }
+}
+
+/* Mobile-First Fluid Utility Classes */
+.fluid-container {
+  padding-left: clamp(0.6rem, 3vw, 1.5rem);
+  padding-right: clamp(0.6rem, 3vw, 1.5rem);
+}
+
+.fluid-card {
+  padding: clamp(0.75rem, 3.2vw, 1.5rem);
+}
+
+.fluid-gap {
+  gap: clamp(0.5rem, 2vw, 1.25rem);
 }
 
 .gold-gradient-text {

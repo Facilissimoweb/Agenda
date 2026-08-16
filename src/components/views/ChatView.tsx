@@ -606,15 +606,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const activeBooksCount = books.filter((b) => b.isEnabled).length;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-145px)] max-w-4xl mx-auto space-y-2 pb-16 sm:pb-2">
+    <div className="flex flex-col h-[calc(100dvh-clamp(120px,15vh,155px))] max-w-4xl mx-auto space-y-[clamp(6px,1.2vh,12px)]">
       {/* Sleek, Compact Mobile-First Header Bar */}
-      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] px-3 py-2 sm:px-4 sm:py-3 rounded-2xl flex items-center justify-between gap-2 shadow-lg flex-shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] px-[clamp(8px,2.5vw,16px)] py-[clamp(6px,1.2vh,12px)] rounded-2xl flex items-center justify-between gap-2 shadow-lg flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-sm text-base sm:text-lg">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-400/20 to-purple-800/40 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-sm text-sm sm:text-lg">
               🔮
             </div>
-            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-[#120f26] rounded-full ${hasConfiguredKey ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 border-2 border-[#120f26] rounded-full ${hasConfiguredKey ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
           </div>
 
           <div className="min-w-0">
@@ -622,8 +622,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <h1 className="font-cinzel font-bold text-xs sm:text-sm text-white gold-gradient-text truncate">
                 Oracolo AI
               </h1>
-              <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-md bg-purple-950/90 border border-amber-400/30 text-amber-300 font-mono font-semibold">
-                Llama 3.3 70B
+              <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-md bg-purple-950/90 border border-amber-400/30 text-amber-300 font-mono font-semibold">
+                Llama 3.3
               </span>
             </div>
 
@@ -632,14 +632,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
               className="text-[10px] text-purple-300/80 hover:text-amber-300 flex items-center gap-1 cursor-pointer truncate"
             >
               {keyDetails.source.startsWith('vercel') ? (
-                <span className="text-emerald-400 font-medium">● Vercel Attiva</span>
+                <span className="text-emerald-400 font-medium">● Vercel</span>
               ) : keyDetails.source === 'local' ? (
-                <span className="text-emerald-400 font-medium">● Chiave Locale</span>
+                <span className="text-emerald-400 font-medium">● Locale</span>
               ) : (
-                <span className="text-amber-300 font-medium">● Offline / Oracolo</span>
+                <span className="text-amber-300 font-medium">● Oracolo</span>
               )}
               <span className="text-purple-400/60">•</span>
-              <span className="text-amber-300/90 font-medium">{activeBooksCount} Grimori attivi</span>
+              <span className="text-amber-300/90 font-medium">{activeBooksCount} Testi</span>
               {showCompactStatus ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
             </button>
           </div>
@@ -650,7 +650,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {/* Books / Grimoires Button */}
           <button
             onClick={() => setIsGrimoireModalOpen(true)}
-            className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 border border-amber-400/40 text-amber-300 font-semibold flex items-center gap-1 transition active:scale-95 cursor-pointer text-[11px] sm:text-xs shadow-sm"
+            className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 border border-amber-400/40 text-amber-300 font-semibold flex items-center gap-1 transition active:scale-95 cursor-pointer text-[10px] sm:text-xs shadow-sm"
             title="Gestisci Manuali & Grimori Sacri"
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-400" />
@@ -664,7 +664,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <button
             onClick={() => setIsSettingsOpen(true)}
             title="Impostazioni Groq & Modello"
-            className={`p-2 rounded-xl border flex items-center justify-center transition active:scale-95 cursor-pointer ${
+            className={`p-1.5 sm:p-2 rounded-xl border flex items-center justify-center transition active:scale-95 cursor-pointer ${
               hasConfiguredKey
                 ? 'bg-[#1b153f] border-[#2a244d] text-purple-200 hover:text-amber-300 hover:border-amber-400/40'
                 : 'bg-amber-400/20 border-amber-400 text-amber-300 animate-pulse'
@@ -677,7 +677,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <button
             onClick={handleClearHistory}
             title="Pulisci cronologia messaggi"
-            className="p-2 rounded-xl bg-[#1b153f] border border-[#2a244d] text-purple-300 hover:text-rose-400 hover:border-rose-500/40 transition active:scale-95 cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl bg-[#1b153f] border border-[#2a244d] text-purple-300 hover:text-rose-400 hover:border-rose-500/40 transition active:scale-95 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -939,24 +939,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
       />
 
       {/* Message Input & Action Bar */}
-      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] p-2 sm:p-2.5 rounded-2xl shadow-xl flex-shrink-0 space-y-2">
+      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] p-[clamp(6px,1.6vw,10px)] rounded-2xl shadow-xl flex-shrink-0 space-y-[clamp(4px,1vh,8px)]">
         {/* Attached File Banner if loaded */}
         {attachedFile && (
-          <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#1b143a] border border-amber-400/50 rounded-xl p-2 sm:p-2.5 space-y-2 animate-in fade-in">
+          <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#1b143a] border border-amber-400/50 rounded-xl p-[clamp(6px,1.5vw,10px)] space-y-1.5 animate-in fade-in">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs text-amber-200 min-w-0">
-                <div className="p-1.5 rounded-lg bg-amber-400/20 text-amber-300 flex-shrink-0">
-                  <FileText className="w-4 h-4" />
+                <div className="p-1 rounded-lg bg-amber-400/20 text-amber-300 flex-shrink-0">
+                  <FileText className="w-3.5 h-3.5" />
                 </div>
                 <div className="truncate">
-                  <div className="font-semibold text-white truncate flex items-center gap-1.5">
-                    <span>{attachedFile.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">
+                  <div className="font-semibold text-white truncate flex items-center gap-1">
+                    <span className="text-[11px] sm:text-xs truncate">{attachedFile.name}</span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono flex-shrink-0">
                       {attachedFile.sizeFormatted}
                     </span>
                   </div>
-                  <p className="text-[10px] text-purple-300/80">
-                    {attachedFile.wordCount.toLocaleString('it-IT')} parole caricate dal dispositivo
+                  <p className="text-[9px] text-purple-300/80">
+                    {attachedFile.wordCount.toLocaleString('it-IT')} parole
                   </p>
                 </div>
               </div>
@@ -965,65 +965,64 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowFilePreview(true)}
-                  className="p-1.5 bg-[#140f2b] hover:bg-purple-900/60 border border-purple-500/30 rounded-lg text-purple-300 hover:text-amber-300 text-xs transition cursor-pointer"
+                  className="p-1 bg-[#140f2b] hover:bg-purple-900/60 border border-purple-500/30 rounded-lg text-purple-300 hover:text-amber-300 text-xs transition cursor-pointer"
                   title="Leggi anteprima testo"
                 >
-                  <Eye className="w-3.5 h-3.5" />
+                  <Eye className="w-3 h-3" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setAttachedFile(null)}
-                  className="p-1.5 bg-[#140f2b] hover:bg-rose-950/60 border border-rose-500/30 rounded-lg text-rose-300 hover:text-rose-200 text-xs transition cursor-pointer"
+                  className="p-1 bg-[#140f2b] hover:bg-rose-950/60 border border-rose-500/30 rounded-lg text-rose-300 hover:text-rose-200 text-xs transition cursor-pointer"
                   title="Rimuovi allegato"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             </div>
 
             {/* Quick Actions with File */}
-            <div className="flex items-center gap-1.5 overflow-x-auto text-[10px] pb-0.5 scrollbar-none">
-              <span className="text-purple-400 font-semibold flex-shrink-0">Azioni rapide:</span>
+            <div className="flex items-center gap-1 overflow-x-auto text-[9px] sm:text-[10px] pb-0.5 scrollbar-none">
               <button
                 type="button"
                 onClick={() => handleQuickAnalyzeFile('completa')}
-                className="px-2 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1"
+                className="px-2 py-0.5 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1"
               >
-                <Sparkles className="w-3 h-3" />
-                <span>Analizza con Oracolo</span>
+                <Sparkles className="w-2.5 h-2.5" />
+                <span>Analizza</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickAnalyzeFile('simboli')}
-                className="px-2 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
               >
-                <span>🔮 Simboli & Tarocchi</span>
+                <span>🔮 Simboli</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickAnalyzeFile('rituali')}
-                className="px-2 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
               >
-                <span>🕯️ Rituali & Pratiche</span>
+                <span>🕯️ Rituali</span>
               </button>
               <button
                 type="button"
                 onClick={handleAddAttachedToGrimoires}
-                className="px-2 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1 ml-auto"
+                className="px-2 py-0.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1 ml-auto"
                 title="Salva per sempre questo testo nei tuoi Manuali Sacri"
               >
-                <BookMarked className="w-3 h-3" />
-                <span>+ Salva nei Manuali</span>
+                <BookMarked className="w-2.5 h-2.5" />
+                <span>+ Salva</span>
               </button>
             </div>
           </div>
         )}
 
         {/* Active Grimoires Quick Pills Bar */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto text-[10px] pb-1 scrollbar-none">
-          <div className="flex items-center gap-1.5 flex-nowrap">
-            <span className="text-purple-400/80 font-semibold flex items-center gap-1 flex-shrink-0">
-              <BookOpen className="w-3 h-3 text-amber-400" /> Fonti:
+        <div className="flex items-center justify-between gap-1.5 overflow-x-auto text-[9px] sm:text-[10px] pb-0.5 scrollbar-none">
+          <div className="flex items-center gap-1 flex-nowrap">
+            <span className="text-purple-400/80 font-semibold flex items-center gap-0.5 flex-shrink-0">
+              <BookOpen className="w-2.5 h-2.5 text-amber-400" /> Fonti:
             </span>
             {books.slice(0, 3).map((b) => (
               <button
@@ -1033,7 +1032,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   setBooks(updated);
                   onShowToast(!b.isEnabled ? `📖 "${b.title}" attivato` : `"${b.title}" disattivato`);
                 }}
-                className={`px-2 py-0.5 rounded-md border flex items-center gap-1 whitespace-nowrap transition cursor-pointer ${
+                className={`px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 whitespace-nowrap transition cursor-pointer text-[9px] sm:text-[10px] ${
                   b.isEnabled
                     ? 'bg-amber-400/15 border-amber-400/40 text-amber-300 font-medium'
                     : 'bg-purple-950/40 border-purple-500/20 text-purple-400 line-through opacity-60'
@@ -1041,7 +1040,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 title={b.isEnabled ? 'Clicca per disattivare questo testo' : 'Clicca per includere nelle risposte'}
               >
                 <span>{b.coverEmoji}</span>
-                <span className="truncate max-w-[110px]">{b.title.split('&')[0]}</span>
+                <span className="truncate max-w-[85px] sm:max-w-[110px]">{b.title.split('&')[0]}</span>
               </button>
             ))}
           </div>
@@ -1049,9 +1048,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <button
             type="button"
             onClick={() => setIsGrimoireModalOpen(true)}
-            className="text-amber-400 hover:underline flex-shrink-0 font-medium flex items-center gap-0.5 cursor-pointer ml-auto"
+            className="text-amber-400 hover:underline flex-shrink-0 font-medium flex items-center gap-0.5 cursor-pointer ml-auto text-[9px] sm:text-[10px] whitespace-nowrap"
           >
-            <span>+ Gestisci Manuali</span>
+            <span>+ Manuali</span>
           </button>
         </div>
 
@@ -1061,38 +1060,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
             e.preventDefault();
             handleSendMessage();
           }}
-          className="flex items-end gap-1.5 sm:gap-2"
+          className="flex items-end gap-1 sm:gap-2"
         >
           {/* Direct File Attachment Button (.txt, .md, etc.) */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
               attachedFile
                 ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 font-bold'
                 : 'bg-[#1b153f] border border-purple-500/30 text-purple-300 hover:text-amber-300 hover:border-amber-400/40'
             }`}
-            title="Carica file di testo (.txt, .md, .json) dal dispositivo senza Drive"
+            title="Carica file di testo (.txt, .md, .json) dal dispositivo"
           >
-            <Paperclip className="w-4 h-4" />
+            <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Voice Mic Button */}
           <button
             type="button"
             onClick={toggleSpeechRecognition}
-            className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
               isRecording
                 ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
                 : 'bg-[#1b153f] border border-purple-500/30 text-amber-400 hover:text-amber-300 hover:border-amber-400/40'
             }`}
-            title={isRecording ? 'Interrompi registrazione' : 'Parla al microfono in italiano'}
+            title={isRecording ? 'Interrompi registrazione' : 'Parla al microfono'}
           >
-            {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isRecording ? <MicOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Mic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
 
           {/* Text Input Area */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative min-w-0">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -1104,8 +1103,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   handleSendMessage();
                 }
               }}
-              placeholder={attachedFile ? `Fai una domanda sul testo "${attachedFile.name}"...` : "Chiedi all'Oracolo o cita un testo (es. Secondo il Testo 1...)..."}
-              className="w-full bg-[#1b153f] border border-[#2a244d] focus:border-amber-400/80 rounded-xl px-3 py-2 text-xs sm:text-[13px] text-white placeholder-purple-400/50 focus:outline-none resize-none min-h-[38px] max-h-24 scrollbar-thin leading-relaxed"
+              placeholder={attachedFile ? `Domanda su "${attachedFile.name}"...` : "Chiedi all'Oracolo..."}
+              className="w-full bg-[#1b153f] border border-[#2a244d] focus:border-amber-400/80 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[13px] text-white placeholder-purple-400/50 focus:outline-none resize-none min-h-[34px] sm:min-h-[38px] max-h-24 scrollbar-thin leading-relaxed"
             />
           </div>
 
@@ -1113,13 +1112,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}
-            className="p-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-40 disabled:hover:from-amber-500 transition-all duration-200 shadow-md shadow-amber-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
+            className="p-2 sm:p-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl disabled:opacity-40 disabled:hover:from-amber-500 transition-all duration-200 shadow-md shadow-amber-500/20 active:scale-95 flex-shrink-0 cursor-pointer"
             title="Invia all'Oracolo"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin text-slate-950" />
             ) : (
-              <Send className="w-4 h-4 text-slate-950" />
+              <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             )}
           </button>
         </form>

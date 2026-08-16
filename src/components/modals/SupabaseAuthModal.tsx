@@ -205,35 +205,35 @@ export const SupabaseAuthModal: React.FC<SupabaseAuthModalProps> = ({
   const currentAppOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-      <div className="bg-[#120d26] border border-amber-400/40 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] pb-6 sm:pb-0">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-[clamp(6px,2vw,16px)] bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+      <div className="bg-[#120d26] border border-amber-400/40 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,88vh)]">
         
         {/* Header */}
-        <div className="p-5 border-b border-[#2a244d] flex items-center justify-between bg-gradient-to-r from-[#1a1236] to-[#120d26]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 text-emerald-300">
-              <Database className="w-5 h-5" />
+        <div className="px-[clamp(10px,2.8vw,18px)] py-[clamp(8px,1.5vh,14px)] border-b border-[#2a244d] flex items-center justify-between bg-gradient-to-r from-[#1a1236] to-[#120d26] flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 text-emerald-300 flex-shrink-0">
+              <Database className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h2 className="font-cinzel text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>Supabase Cloud Database & Login</span>
+            <div className="min-w-0">
+              <h2 className="font-cinzel text-xs sm:text-base font-bold text-white flex items-center gap-1.5 truncate">
+                <span>Supabase Cloud</span>
                 {isConnected && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-mono">
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-mono flex-shrink-0">
                     ONLINE 🟢
                   </span>
                 )}
               </h2>
-              <p className="text-xs text-purple-300">
-                Salvataggio reale in cloud per: <strong className="text-amber-300">{AUTHORIZED_EMAIL}</strong>
+              <p className="text-[9px] sm:text-xs text-purple-300 truncate">
+                Cloud database: <strong className="text-amber-300">{AUTHORIZED_EMAIL}</strong>
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-purple-300 hover:text-white hover:bg-purple-900/40 transition cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-lg text-purple-300 hover:text-white hover:bg-purple-900/40 transition cursor-pointer flex-shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 

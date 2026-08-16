@@ -329,14 +329,14 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-      <div className="bg-[#100d24] border border-[#2a244d] w-full max-w-4xl h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 relative">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-[clamp(6px,2vw,16px)] bg-black/85 backdrop-blur-md animate-in fade-in">
+      <div className="bg-[#100d24] border border-[#2a244d] w-full max-w-4xl max-h-[min(90dvh,88vh)] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 relative">
         
         {/* MODAL HEADER */}
-        <div className="px-3.5 py-3 sm:p-4 border-b border-[#2a244d] bg-[#151033] flex items-center justify-between gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400/20 to-blue-600/30 border border-amber-400/40 flex items-center justify-center text-xl shadow-md flex-shrink-0">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+        <div className="px-[clamp(10px,2.8vw,18px)] py-[clamp(8px,1.5vh,14px)] border-b border-[#2a244d] bg-[#151033] flex items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400/20 to-blue-600/30 border border-amber-400/40 flex items-center justify-center text-lg sm:text-xl shadow-md flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-6 sm:h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
                 <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
                 <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
                 <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
@@ -359,7 +359,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                   {hasToken ? 'Connesso' : 'Disconnesso'}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-purple-300/80 truncate">
+              <p className="text-[9px] sm:text-xs text-purple-300/80 truncate">
                 Backup, file e sincronizzazione testi
               </p>
             </div>
@@ -367,15 +367,15 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-purple-400 hover:text-white hover:bg-purple-900/40 rounded-xl transition cursor-pointer flex-shrink-0"
+            className="p-1 sm:p-1.5 text-purple-400 hover:text-white hover:bg-purple-900/40 rounded-xl transition cursor-pointer flex-shrink-0"
             title="Chiudi"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* AUTH BANNER / SIGN IN WITH GOOGLE */}
-        <div className="px-4 py-3 bg-[#161138] border-b border-[#2a244d] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="px-[clamp(10px,2.5vw,16px)] py-[clamp(6px,1.2vh,12px)] bg-[#161138] border-b border-[#2a244d] flex flex-col sm:flex-row items-center justify-between gap-2.5">
           {hasToken && googleUser ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">

@@ -591,3 +591,81 @@ export async function transcribeAudioWithGroq(
   }
 }
 
+/**
+ * Correct and Refine Text with Groq AI (Llama 3.3)
+ * Fixes spelling, punctuation, capitalization, flow, and formatting of transcribed voice or written notes
+ */
+export async function correctAndRefineTextWithGroq(
+  rawText: string,
+  customApiKey?: string
+): Promise<{ text: string; success: boolean; error?: string }> {
+  if (!rawText || !rawText.trim()) {
+    return { text: '', success: false, error: 'Nessun testo presente da correggere.' };
+  }
+
+  const apiKey = sanitizeApiKey(customApiKey || getStoredGroqApiKey());
+  if (!apiKey) {
+    // If no Groq key, provide basic clean capitalisation as fallback
+    const trimmed = rawText.trim();
+    const formatted = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    return { 
+      text: formatted, 
+      success: true 
+    };
+  }
+
+  const model = getStoredGroqModel() || 'llama-3.3-70b-versatile';
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: `Sei l'assistente editoriale per il Diario di Bordo di Maria Teresa.
+Il tuo compito è ESCLUSIVAMENTE correggere, ripulire e formattare il testo fornito dall'utente (che può derivare da dettatura vocale automatica o note rapide):
+1. Correggi errori di battitura, grammatica, punteggiatura (virgole, punti, due punti, punti interrogativi) e maiuscole/minuscole.
+2. Rispetta e valorizza i termini esoterici, astrologici, oracolari e dei tarocchi (es. Arcani Maggiori, Luna Crescente, Selenite, Bagatto, Tema Natale, ecc.).
+3. Suddividi in paragrafi chiari e leggibili se il testo è lungo.
+4. Mantieni rigorosamente il significato originale, la prima persona e la voce autentica dell'autrice.
+5. NON aggiungere premesse, spiegazioni o conclusioni (come "Ecco il testo corretto:"). Restituisci ESCLUSIVAMENTE il testo corretto e ripulito.`,
+          },
+          {
+            role: 'user',
+            content: `Correggi e perfeziona questo appunto del diario:\n\n${rawText}`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 3500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => null);
+      const msg = errJson?.error?.message || `Errore Groq (${response.status})`;
+      return { text: rawText, success: false, error: msg };
+    }
+
+    const data = await response.json();
+    const output = (data?.choices?.[0]?.message?.content || '').trim();
+
+    return {
+      text: output || rawText,
+      success: true,
+    };
+  } catch (err: any) {
+    console.error('Text correction error:', err);
+    return {
+      text: rawText,
+      success: false,
+      error: err?.message || 'Errore durante la correzione automatica del testo',
+    };
+  }
+}
+
