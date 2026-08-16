@@ -20,6 +20,7 @@ import {
 import { 
   getStoredGrimoires, 
   saveStoredGrimoires, 
+  saveCustomGrimoire,
   toggleGrimoireEnabled, 
   buildGrimoireContextForQuery 
 } from '../../services/grimoireService';
@@ -49,7 +50,12 @@ import {
   BookMarked,
   Book,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Paperclip,
+  FileText,
+  UploadCloud,
+  Eye,
+  FileCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -125,6 +131,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // Quick inline key input banner state
   const [quickKeyInput, setQuickKeyInput] = useState('');
+
+  // Attached Text File State (.txt, .md, .json, .csv, etc.)
+  const [attachedFile, setAttachedFile] = useState<{
+    name: string;
+    content: string;
+    sizeFormatted: string;
+    wordCount: number;
+  } | null>(null);
+  const [showFilePreview, setShowFilePreview] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Speech Recognition instance ref
   const recognitionRef = useRef<any>(null);
@@ -259,6 +275,98 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
+  // Handle Local File Upload (.txt, .md, .json, etc.)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processLocalTextFile(file);
+    e.target.value = '';
+  };
+
+  const processLocalTextFile = (file: File) => {
+    const isText = 
+      file.type.startsWith('text/') || 
+      file.name.endsWith('.txt') || 
+      file.name.endsWith('.md') || 
+      file.name.endsWith('.json') || 
+      file.name.endsWith('.csv') ||
+      file.name.endsWith('.log');
+
+    if (!isText && !file.type.includes('text')) {
+      onShowToast(`Formato non supportato. Seleziona un file di testo (.txt, .md, .json).`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (typeof text === 'string') {
+        const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+        const sizeFormatted = file.size > 1024 * 1024 
+          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.round(file.size / 1024)} KB`;
+
+        setAttachedFile({
+          name: file.name,
+          content: text,
+          sizeFormatted,
+          wordCount: words,
+        });
+
+        onShowToast(`📄 File "${file.name}" allegato (${words.toLocaleString('it-IT')} parole)!`);
+        try {
+          confetti({ particleCount: 15, spread: 40, origin: { y: 0.8 }, colors: ['#d4af37', '#a855f7'] });
+        } catch (e) {}
+      }
+    };
+    reader.onerror = () => {
+      onShowToast('Errore durante la lettura del file dal dispositivo.');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleAddAttachedToGrimoires = () => {
+    if (!attachedFile) return;
+    const cleanTitle = attachedFile.name.replace(/\.[^/.]+$/, '');
+    const { books: updated, savedBook } = saveCustomGrimoire({
+      title: cleanTitle,
+      author: 'Maria Teresa',
+      category: 'personale',
+      coverEmoji: '📜',
+      description: `Testo caricato dal dispositivo: ${attachedFile.name} (${attachedFile.wordCount} parole).`,
+      tags: ['manuale', 'documento', cleanTitle.toLowerCase()],
+      isEnabled: true,
+      sections: [
+        {
+          id: `sec-${Date.now()}`,
+          title: 'Contenuto Integrale',
+          chapterNumber: 'Capitolo 1',
+          content: attachedFile.content,
+        },
+      ],
+      fullText: attachedFile.content,
+    });
+
+    setBooks(updated);
+    onShowToast(`✨ "${savedBook.title}" salvato nella Biblioteca Sacra & attivo per l'Oracolo!`);
+    try {
+      confetti({ particleCount: 25, spread: 50, origin: { y: 0.7 }, colors: ['#d4af37', '#10b981'] });
+    } catch (e) {}
+  };
+
+  const handleQuickAnalyzeFile = (mode: 'completa' | 'simboli' | 'rituali') => {
+    if (!attachedFile) return;
+    let query = '';
+    if (mode === 'completa') {
+      query = `Analizza in dettaglio il documento allegato "${attachedFile.name}": sintetizza i punti chiave, la saggezza esoterica e i messaggi evolutivi per me. ✨`;
+    } else if (mode === 'simboli') {
+      query = `Esamina il documento allegato "${attachedFile.name}" e decodifica tutti i simboli, gli archetipi dei Tarocchi, le corrispondenze astrologiche e gli elementi alchemici presenti. 🌌`;
+    } else {
+      query = `Ispirandoti al testo allegato "${attachedFile.name}", suggeriscimi un rituale sacro, una formula d'intenzione o pratiche di purificazione ed erbe adatte. 🕯️`;
+    }
+    handleSendMessage(query);
+  };
+
   // Send Message Handler
   const handleSendMessage = async (customText?: string) => {
     const text = (customText || inputMessage).trim();
@@ -314,6 +422,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
     // Build RAG / Knowledge Base Context from Active Grimoires
     const { contextText: grimoiresText, sourcesUsed } = buildGrimoireContextForQuery(text, books);
 
+    // If a text file is attached directly to the chat, inject it into the prompt context
+    let attachedFileContext = '';
+    if (attachedFile) {
+      attachedFileContext = `\n\n========================================\nDOCUMENTO ALLEGATO DA MARIA TERESA (File: "${attachedFile.name}"):\n${attachedFile.content.slice(0, 35000)}\n========================================\n`;
+    }
+
+    const effectiveSources = attachedFile 
+      ? [`📄 ${attachedFile.name}`, ...sourcesUsed]
+      : sourcesUsed;
+
     const extraContext = includeSanctuaryContext
       ? {
           currentDateIso: todayIso,
@@ -324,8 +442,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           todayTarot: "L'Imperatrice (III) • Creatività & Fertilità",
           appointments: appointments,
           appointmentsCount: appointments.length,
-          activeGrimoiresText: grimoiresText,
-          sourcesUsed: sourcesUsed,
+          activeGrimoiresText: (grimoiresText || '') + attachedFileContext,
+          sourcesUsed: effectiveSources,
           userQuery: text,
         }
       : undefined;
@@ -811,8 +929,96 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
+      {/* Hidden File Input for Direct Local .TXT / Document Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,.md,.json,.csv,.log,text/*"
+        onChange={handleFileUpload}
+        className="hidden"
+      />
+
       {/* Message Input & Action Bar */}
-      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] p-2 sm:p-2.5 rounded-2xl shadow-xl flex-shrink-0 space-y-1.5">
+      <div className="bg-[#120f26]/95 backdrop-blur-md border border-[#2a244d] p-2 sm:p-2.5 rounded-2xl shadow-xl flex-shrink-0 space-y-2">
+        {/* Attached File Banner if loaded */}
+        {attachedFile && (
+          <div className="bg-gradient-to-r from-amber-500/15 via-purple-900/40 to-[#1b143a] border border-amber-400/50 rounded-xl p-2 sm:p-2.5 space-y-2 animate-in fade-in">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs text-amber-200 min-w-0">
+                <div className="p-1.5 rounded-lg bg-amber-400/20 text-amber-300 flex-shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div className="truncate">
+                  <div className="font-semibold text-white truncate flex items-center gap-1.5">
+                    <span>{attachedFile.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">
+                      {attachedFile.sizeFormatted}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-purple-300/80">
+                    {attachedFile.wordCount.toLocaleString('it-IT')} parole caricate dal dispositivo
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowFilePreview(true)}
+                  className="p-1.5 bg-[#140f2b] hover:bg-purple-900/60 border border-purple-500/30 rounded-lg text-purple-300 hover:text-amber-300 text-xs transition cursor-pointer"
+                  title="Leggi anteprima testo"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttachedFile(null)}
+                  className="p-1.5 bg-[#140f2b] hover:bg-rose-950/60 border border-rose-500/30 rounded-lg text-rose-300 hover:text-rose-200 text-xs transition cursor-pointer"
+                  title="Rimuovi allegato"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Actions with File */}
+            <div className="flex items-center gap-1.5 overflow-x-auto text-[10px] pb-0.5 scrollbar-none">
+              <span className="text-purple-400 font-semibold flex-shrink-0">Azioni rapide:</span>
+              <button
+                type="button"
+                onClick={() => handleQuickAnalyzeFile('completa')}
+                className="px-2 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Analizza con Oracolo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickAnalyzeFile('simboli')}
+                className="px-2 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
+              >
+                <span>🔮 Simboli & Tarocchi</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickAnalyzeFile('rituali')}
+                className="px-2 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 font-medium whitespace-nowrap transition cursor-pointer"
+              >
+                <span>🕯️ Rituali & Pratiche</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddAttachedToGrimoires}
+                className="px-2 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1 ml-auto"
+                title="Salva per sempre questo testo nei tuoi Manuali Sacri"
+              >
+                <BookMarked className="w-3 h-3" />
+                <span>+ Salva nei Manuali</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Active Grimoires Quick Pills Bar */}
         <div className="flex items-center justify-between gap-2 overflow-x-auto text-[10px] pb-1 scrollbar-none">
           <div className="flex items-center gap-1.5 flex-nowrap">
@@ -857,6 +1063,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
           }}
           className="flex items-end gap-1.5 sm:gap-2"
         >
+          {/* Direct File Attachment Button (.txt, .md, etc.) */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 active:scale-95 cursor-pointer ${
+              attachedFile
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 font-bold'
+                : 'bg-[#1b153f] border border-purple-500/30 text-purple-300 hover:text-amber-300 hover:border-amber-400/40'
+            }`}
+            title="Carica file di testo (.txt, .md, .json) dal dispositivo senza Drive"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+
           {/* Voice Mic Button */}
           <button
             type="button"
@@ -884,7 +1104,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   handleSendMessage();
                 }
               }}
-              placeholder="Chiedi all'Oracolo o cita un testo (es. Secondo il Testo 1...)..."
+              placeholder={attachedFile ? `Fai una domanda sul testo "${attachedFile.name}"...` : "Chiedi all'Oracolo o cita un testo (es. Secondo il Testo 1...)..."}
               className="w-full bg-[#1b153f] border border-[#2a244d] focus:border-amber-400/80 rounded-xl px-3 py-2 text-xs sm:text-[13px] text-white placeholder-purple-400/50 focus:outline-none resize-none min-h-[38px] max-h-24 scrollbar-thin leading-relaxed"
             />
           </div>
@@ -915,9 +1135,69 @@ export const ChatView: React.FC<ChatViewProps> = ({
         onOpenGoogleDrive={onOpenGoogleDrive}
       />
 
+      {/* Attached File Preview Modal */}
+      {showFilePreview && attachedFile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#120f26] border border-[#2a244d] w-full max-w-2xl rounded-3xl p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#2a244d] pb-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-cinzel font-bold text-sm text-white gold-gradient-text">
+                    {attachedFile.name}
+                  </h3>
+                  <p className="text-[11px] text-purple-300">
+                    {attachedFile.wordCount.toLocaleString('it-IT')} parole • {attachedFile.sizeFormatted}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFilePreview(false)}
+                className="text-purple-300 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-[#181335] p-3.5 rounded-2xl border border-purple-500/20 text-xs text-purple-100 font-mono whitespace-pre-wrap leading-relaxed select-text">
+              {attachedFile.content}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-[#2a244d] flex-shrink-0 text-xs">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(attachedFile.content);
+                  onShowToast('Testo copiato negli appunti!');
+                }}
+                className="px-3 py-1.5 bg-[#1b153f] border border-purple-500/30 text-purple-200 hover:text-white rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copia Testo</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAddAttachedToGrimoires}
+                  className="px-3 py-1.5 bg-purple-900 hover:bg-purple-800 border border-amber-400/40 text-amber-300 font-medium rounded-xl flex items-center gap-1 cursor-pointer"
+                >
+                  <BookMarked className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Salva nei Manuali</span>
+                </button>
+                <button
+                  onClick={() => setShowFilePreview(false)}
+                  className="px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl cursor-pointer"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Groq Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#120f26] border border-[#2a244d] w-full max-w-lg rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[#2a244d] pb-3">

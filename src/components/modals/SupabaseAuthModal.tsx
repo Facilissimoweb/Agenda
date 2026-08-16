@@ -205,8 +205,8 @@ export const SupabaseAuthModal: React.FC<SupabaseAuthModalProps> = ({
   const currentAppOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-      <div className="bg-[#120d26] border border-amber-400/40 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+      <div className="bg-[#120d26] border border-amber-400/40 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] pb-6 sm:pb-0">
         
         {/* Header */}
         <div className="p-5 border-b border-[#2a244d] flex items-center justify-between bg-gradient-to-r from-[#1a1236] to-[#120d26]">

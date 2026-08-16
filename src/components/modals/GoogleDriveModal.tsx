@@ -103,6 +103,9 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
 
   // Check token on open
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
   useEffect(() => {
     if (isOpen) {
       getDriveAccessToken().then((token) => {
@@ -326,14 +329,14 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-      <div className="bg-[#100d24] border border-[#2a244d] w-full max-w-4xl max-h-[92vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 relative">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+      <div className="bg-[#100d24] border border-[#2a244d] w-full max-w-4xl h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 relative">
         
         {/* MODAL HEADER */}
-        <div className="p-4 sm:p-5 border-b border-[#2a244d] bg-[#151033] flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400/20 to-blue-600/30 border border-amber-400/40 flex items-center justify-center text-xl shadow-md">
-              <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+        <div className="px-3.5 py-3 sm:p-4 border-b border-[#2a244d] bg-[#151033] flex items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400/20 to-blue-600/30 border border-amber-400/40 flex items-center justify-center text-xl shadow-md flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
                 <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
                 <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
                 <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
@@ -342,29 +345,30 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                 <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
               </svg>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-cinzel font-bold text-white gold-gradient-text">
-                  Google Drive Integrato
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs sm:text-base font-cinzel font-bold text-white gold-gradient-text truncate">
+                  Google Drive
                 </h2>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold border flex items-center gap-1 ${
                   hasToken 
                     ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300' 
                     : 'bg-amber-950/80 border-amber-500/40 text-amber-300'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${hasToken ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                  {hasToken ? 'Connesso' : 'Non Connesso'}
+                  {hasToken ? 'Connesso' : 'Disconnesso'}
                 </span>
               </div>
-              <p className="text-xs text-purple-300/80">
-                Sincronizza file, importa testi per l'Oracolo ed esegui backup completi del tuo Santuario.
+              <p className="text-[10px] sm:text-xs text-purple-300/80 truncate">
+                Backup, file e sincronizzazione testi
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-purple-400 hover:text-white hover:bg-purple-900/30 rounded-xl transition cursor-pointer"
+            className="p-1.5 text-purple-400 hover:text-white hover:bg-purple-900/40 rounded-xl transition cursor-pointer flex-shrink-0"
+            title="Chiudi"
           >
             <X className="w-5 h-5" />
           </button>
@@ -590,13 +594,56 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                       <p className="text-[11px] text-rose-200/90 pl-6 break-words">
                         {loginError}
                       </p>
-                      <div className="mt-2 pt-2 border-t border-rose-500/20 text-[11px] text-purple-200 pl-6 space-y-1">
-                        <p className="font-semibold text-amber-300">💡 Suggerimenti per smartphone o browser:</p>
-                        <p>1. Verifica che il browser non stia bloccando i popup (controlla l'icona a lucchetto o i 3 puntini in alto).</p>
-                        <p>2. Prova il pulsante <strong>Accesso Diretto Google</strong> qui sotto.</p>
-                      </div>
                     </div>
                   )}
+
+                  {/* Troubleshooting Guide for origin_mismatch */}
+                  <div className="p-3.5 bg-[#1a1238] border border-amber-400/30 rounded-xl text-left text-xs text-purple-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5 font-cinzel">
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        Origine autorizzata Google (Origin Mismatch)
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-purple-300 leading-relaxed">
+                      Se Google mostra <strong className="text-amber-300">"Errore 400: origin_mismatch"</strong>, è necessario registrare l'indirizzo da cui stai aprendo l'app nelle <em>Origini JavaScript autorizzate</em> della Google Cloud Console:
+                    </p>
+
+                    <div className="flex items-center gap-2 bg-[#0d0822] p-2 rounded-lg border border-purple-500/30">
+                      <input 
+                        type="text" 
+                        readOnly 
+                        value={currentOrigin} 
+                        className="bg-transparent text-amber-300 font-mono text-[11px] flex-1 outline-none select-all truncate"
+                      />
+                      <button
+                        onClick={() => {
+                          if (currentOrigin && navigator.clipboard) {
+                            navigator.clipboard.writeText(currentOrigin);
+                            setCopiedOrigin(true);
+                            setTimeout(() => setCopiedOrigin(false), 2500);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[10px] rounded transition cursor-pointer flex items-center gap-1 shrink-0"
+                      >
+                        {copiedOrigin ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-950 stroke-[3]" />
+                            <span>Copiato!</span>
+                          </>
+                        ) : (
+                          <span>Copia URL</span>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="text-[10px] text-purple-300/90 space-y-1 pt-1">
+                      <p>1. Apri la <strong>Google Cloud Console → Credenziali</strong>.</p>
+                      <p>2. Clicca sul tuo <strong>ID Client OAuth 2.0 (Applicazione Web)</strong>.</p>
+                      <p>3. Incolla questo indirizzo in <strong>Origini JavaScript autorizzate</strong> e clicca su <strong>Salva</strong>.</p>
+                    </div>
+                  </div>
 
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
                     <button
